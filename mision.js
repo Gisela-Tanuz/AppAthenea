@@ -26,6 +26,12 @@ const EVA_RESOURCE_ESTIMATES = {
   potableWaterLPerHour: 0.24, // minimum provision, not measured intake
   coolingWaterKgPerHour: 0.45 // sublimator-class analog; architecture may differ on Mars
 };
+// User-supplied extraction of Munguira et al. (2023), Table 1; seasonal rover-location proxies, not route forecasts.
+const MEDA_TEMP_RECORDS = {
+  25: { season: 'Primavera', sols: '34–40', sun: 'Ls 25°', airMin: '−82,2', airMinTime: '05:00', airMax: '−30,2', airMaxTime: '15:00', surfaceMin: '−81,2', surfaceMinTime: '05:30', surfaceMax: '−0,2', surfaceMaxTime: '12:30' },
+  90: { season: 'Verano', sols: '186–194 (Ls 92–96°)', sun: 'Ls 90°', airMin: '−79,2', airMinTime: '05:00', airMax: '−26,2', airMaxTime: '15:00', surfaceMin: '−82,2', surfaceMinTime: '05:00', surfaceMax: '+3,9', surfaceMaxTime: '12:30' },
+  180: { season: 'Otoño (equinoccio)', sols: 'no verificado', sun: 'Ls 180°', airMin: '−76,2', airMinTime: '05:00', airMax: '−15,2', airMaxTime: '14:30', surfaceMin: '−84,2', surfaceMinTime: '05:30', surfaceMax: '+19,9', surfaceMaxTime: '13:00' }
+};
 const STATION_DEFS = M.stations;
 const HAB_SOL = M.habSol;
 
@@ -57,6 +63,25 @@ const fmtH = h => { const m = Math.round(h * 60); return `${Math.floor(m / 60)} 
 const fmtClock = h => { h = ((h % 24) + 24) % 24; return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60) % 60).padStart(2, '0')}`; };
 const nearestWaypoint = sol => ROVER.waypoints.reduce((best, w) => Math.abs(w[0] - sol) < Math.abs(best[0] - sol) ? w : best);
 function setChip(id, text, state) { const el = $(id); el.querySelector('b').textContent = text; el.className = 'chip ' + (state || ''); }
+function renderMedaTemperature() {
+  const record = MEDA_TEMP_RECORDS[$('meda-season').value];
+  $('meda-temperature').innerHTML = `<div class="muted" style="margin:4px 0 8px">${record.sun} · ${record.season} · sols ${record.sols}</div>
+    <table>
+      <tr><th>Medición</th><th>Extremo</th><th class="r">Temperatura</th><th class="r">LTST</th></tr>
+      <tr><td>Aire a 1,45 m (ATS)</td><td>Mín.</td><td class="r">${record.airMin} °C</td><td class="r">${record.airMinTime}</td></tr>
+      <tr><td>Aire a 1,45 m (ATS)</td><td>Máx.</td><td class="r">${record.airMax} °C</td><td class="r">${record.airMaxTime}</td></tr>
+      <tr><td>Superficie (TIRS)</td><td>Mín.</td><td class="r">${record.surfaceMin} °C</td><td class="r">${record.surfaceMinTime}</td></tr>
+      <tr><td>Superficie (TIRS)</td><td>Máx.</td><td class="r">${record.surfaceMax} °C</td><td class="r">${record.surfaceMaxTime}</td></tr>
+    </table>
+    <div class="muted" style="margin-top:8px">El aire a 1,45 m es la referencia más cercana a la altura del traje; la superficie se muestra por separado. LTST = hora solar verdadera local (ventanas de 30 min). Exactitud instrumental: ATS &lt;±1 K; TIRS superficie ±0,75 K.</div>
+    <div class="alert warn" style="margin-top:8px">Proxy de MEDA en ubicaciones recorridas por el rover; no es pronóstico local ni representa toda la ruta. Son mínimos y máximos estacionales, no una serie horaria: no se interpola por hora ni entre tramos. El intervalo de sols para Ls 180° no está verificado; no hay valores extraídos para invierno boreal (Ls 270–360°).</div>
+    <div class="muted" style="margin-top:6px">Fuente: Munguira et al. (2023), Tabla 1, DOI 10.1029/2022JE007559. Valores tomados del material aportado por el usuario; no se revalidaron contra el artículo.</div>`;
+}
+if (MISSION_ID === 'jezero') {
+  $('meda-panel').hidden = false;
+  $('meda-season').addEventListener('change', renderMedaTemperature);
+  renderMedaTemperature();
+}
 function renderConsumables(hours) {
   const extraO2Rate = Number($('o2-architecture').value);
   const metabolicO2 = hours * EVA_RESOURCE_ESTIMATES.metabolicO2KgPerHour;
@@ -437,7 +462,8 @@ function plan() {
   else if (reserve < 1) alerts.push(['warn', `Reserva de solo ${fmtH(reserve)}. Se recomienda al menos 1 h para imprevistos.`]);
   if (far > P.walk) alerts.push(['bad', `La ruta se aleja ${far.toFixed(2)} km de la base y supera el límite de regreso a pie (${P.walk} km).`]);
   if (maxS > P.maxSlope * 0.85) alerts.push(['warn', `Hay tramos de ${maxS.toFixed(0)}°, cerca del límite de ${P.maxSlope}°. Ir con bastones y en fila.`]);
-  if (sun && P.start + hours > sun.set - 0.5) alerts.push(['bad', `La EVA termina a las ${fmtClock(P.start + hours)} y la puesta de sol es a las ${fmtClock(sun.set)}. Salir antes.`]);
+  if (!sun) alerts.push(['warn', 'No se pudo validar el horario de luz. Confirmá la salida y la puesta del sol antes de considerar apta esta EVA.']);
+  else if (P.start + hours > sun.set - 0.5) alerts.push(['bad', `La EVA termina a las ${fmtClock(P.start + hours)} y la puesta de sol es a las ${fmtClock(sun.set)}. Salir antes.`]);
   if (spaceWeather.level === 'bad') alerts.push(['bad', spaceWeather.msg]);
   else if (spaceWeather.level === 'warn') alerts.push(['warn', spaceWeather.msg]);
   if (!alerts.length) alerts.push(['ok', 'Sin alertas: la ruta respeta pendiente, autonomía, distancia de regreso y horario de luz.']);
@@ -530,9 +556,15 @@ async function loadWeather() {
   try {
     const r = await fetch(W.url);
     const s = W.pick(await r.json()); if (!s) throw new Error('el feed no trae datos');
-    const hm = t => { const [a, b] = t.split(':').map(Number); return a + b / 60; }, hhmm = t => t.slice(0, 5);
+    const hm = t => {
+      const match = typeof t === 'string' && /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(t);
+      if (!match || +match[1] > 23 || +match[2] > 59 || (match[3] && +match[3] > 59)) return NaN;
+      return +match[1] + (+match[2] / 60);
+    }, hhmm = t => t.slice(0, 5);
     const num = v => typeof v === 'number' ? v.toFixed(0) : v;
-    sun = { rise: hm(s.sunrise), set: hm(s.sunset) };
+    const sunrise = hm(s.sunrise), sunset = hm(s.sunset);
+    if (!Number.isFinite(sunrise) || !Number.isFinite(sunset)) throw new Error('el feed no trae horarios solares válidos');
+    sun = { rise: sunrise, set: sunset };
     setChip('c-sun', `${hhmm(s.sunrise)}–${hhmm(s.sunset)}`, 'ok');
     const uv = s.local_uv_irradiance_index ? `<tr><td>Radiación UV</td><td class="r">${({ Low: 'Baja', Moderate: 'Moderada', High: 'Alta', 'Very_High': 'Muy alta', 'Very High': 'Muy alta' })[s.local_uv_irradiance_index] || s.local_uv_irradiance_index}</td></tr>` : '';
     const ground = s.min_gts_temp && s.min_gts_temp !== '--' ? `<tr><td>Temperatura del suelo</td><td class="r">${s.min_gts_temp} a ${s.max_gts_temp} °C</td></tr>` : '';
@@ -543,7 +575,7 @@ async function loadWeather() {
       ${ground}<tr><td>Presión</td><td class="r">${num(s.pressure)} Pa</td></tr>${uv}${sky}
       <tr><td>Salida / puesta del sol</td><td class="r">${hhmm(s.sunrise)} / ${hhmm(s.sunset)}</td></tr></table>
       <div class="muted">Fuente: ${W.src}. El feed público trae el último sol procesado (${s.terrestrial_date}), no el clima de hoy.</div>`;
-  } catch (e) { $('rems').innerHTML = `<div class="alert warn">No se pudo consultar la meteorología (${e.message}).</div>`; setChip('c-sun', 'Sin datos', 'warn'); }
+  } catch (e) { sun = null; $('rems').innerHTML = `<div class="alert warn">No se pudo consultar la meteorología (${e.message}).</div>`; setChip('c-sun', 'Sin datos', 'warn'); }
   schedulePlan();
 }
 

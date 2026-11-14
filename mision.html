@@ -183,6 +183,19 @@
     <div class="body"><div id="rems" class="muted">Consultando REMS…</div></div>
   </details>
 
+  <details id="meda-panel" hidden open>
+    <summary>Temperatura estacional · MEDA</summary>
+    <div class="body">
+      <label class="muted" for="meda-season">Registro estacional de Jezero</label>
+      <select id="meda-season" aria-label="Registro estacional MEDA" style="font:14px var(--font);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;min-height:38px;padding:6px">
+        <option value="25">Ls 25° · primavera</option>
+        <option value="90">Ls 90° · verano</option>
+        <option value="180">Ls 180° · otoño</option>
+      </select>
+      <div id="meda-temperature"></div>
+    </div>
+  </details>
+
   <details>
     <summary>Calidad de los datos</summary>
     <div class="body"><div id="quality" class="muted">Calculando…</div></div>
