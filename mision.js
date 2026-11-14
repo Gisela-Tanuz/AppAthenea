@@ -320,6 +320,21 @@ function renderStations() {
     el.innerHTML = `<input type="checkbox" id="st-${k}" ${s.on ? 'checked' : ''} aria-label="Incluir ${s.name}">
       <div><span class="n">${s.label} · ${s.name}</span></div><span class="t">${s.min} min</span>
       <div class="o">${s.obj}<br><i>${s.src}</i>${geologyContext ? `<br>${geologyContext}` : ''}</div>`;
+    const evidence = document.createElement('details');
+    evidence.style.cssText = 'grid-column:2/-1;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2)';
+    const visualResolution = M.hirise?.label || 'Imagen HiRISE configurada';
+    const terrainNote = M.dem.coarse
+      ? `${M.dem.label}; el paso de cálculo de ${CELL_M} m interpola el modelo y no añade detalle.`
+      : `${M.dem.label}; el tamaño de celda de cálculo es ${CELL_M} m.`;
+    evidence.innerHTML = `<summary style="cursor:pointer;font-size:12px;font-weight:600">Ficha de evidencia</summary>
+      <div class="muted" style="display:grid;gap:6px;margin-top:8px">
+        <div><b>Pregunta de la parada</b><br>${s.obj} <span>(objetivo propuesto, no hallazgo confirmado)</span></div>
+        <div><b>Base de ubicación</b><br>${s.src}. El waypoint documenta el recorrido del rover, no confirma una muestra ni el objetivo científico propuesto.</div>
+        <div><b>Contexto geológico</b><br>${geologyContext || 'No hay contexto geológico específico disponible para esta misión.'}</div>
+        <div><b>Imagen para inspección visual</b><br>${visualResolution}; ayuda a reconocer rasgos visibles, pero no certifica transitabilidad.</div>
+        <div><b>Terreno usado para la ruta</b><br>${terrainNote} La ruta es una estimación y no detecta todos los peligros locales.</div>
+      </div>`;
+    el.appendChild(evidence);
     const go = document.createElement('button'); go.textContent = 'Ver'; go.onclick = () => map.setView(s.ll, 17);
     el.querySelector('.t').after(go); el.style.gridTemplateColumns = '22px 1fr auto auto';
     el.querySelector('input').onchange = e => { s.on = e.target.checked; renderStations(); schedulePlan(); };
