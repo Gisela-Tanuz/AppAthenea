@@ -138,6 +138,8 @@
       <div class="muted">Térmico</div>
       <label class="chk"><input type="checkbox" id="l-themis"> THEMIS infrarrojo nocturno (100 m)</label>
       <div class="muted">Claro de noche = roca o suelo firme que retiene calor; oscuro = polvo o arena suelta.</div>
+      <div class="muted">Geología</div>
+      <label class="chk"><input type="checkbox" id="l-geology"> Unidad cartografiada NHjf₂</label>
       <div class="muted">Datos del rover</div>
       <label class="chk"><input type="checkbox" id="l-trav" checked> <span id="lbl-rover">Recorrido del rover</span></label>
       <label class="chk"><input type="checkbox" id="l-wp" checked> <span id="lbl-wp">Paradas del rover</span></label>
@@ -152,6 +154,19 @@
       <div id="alerts" style="display:flex;flex-direction:column;gap:6px"></div>
       <div id="timeline"></div>
       <div id="profile"></div>
+    </div>
+  </details>
+
+  <details open>
+    <summary>Recursos estimados</summary>
+    <div class="body">
+      <label class="muted" for="o2-architecture">Oxígeno extra por ventilación (escenario)</label>
+      <select id="o2-architecture" style="font:14px var(--font);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;min-height:38px;padding:6px">
+        <option value="0">Ciclo cerrado · 0 kg/h</option>
+        <option value="0.125">Purga RCA · 0,125 kg/h</option>
+        <option value="1">Ventilación abierta · 1 kg/h</option>
+      </select>
+      <div id="consumables" class="muted">Calculando estimación…</div>
     </div>
   </details>
 
