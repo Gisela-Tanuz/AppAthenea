@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba Mapa Marte</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg: #f6f1ee; --panel: #ffffff; --fg: #2a1d18; --muted: #7a655c;
+    --line: #e2d6cf; --accent: #b4451f; --route: #ffd166;
+    --font: "Segoe UI", system-ui, sans-serif; --mono: ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17110f; --panel: #221a17; --fg: #f1e6e0; --muted: #b19d93; --line: #3b2e29; --accent: #e5733f; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; grid-template-columns: 300px 1fr; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); }
+  aside { padding: 16px; overflow-y: auto; border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 17px; margin: 0; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; }
+  section { display: flex; flex-direction: column; gap: 6px; }
+  button, select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .modes button { padding: 6px 4px; }
+  #cursor { white-space: pre-line; }
+  .status { white-space: pre-line; font-size: 12px; padding: 6px 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); }
+  .status.err { border-color: var(--accent); color: var(--accent); }
+  .modes button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .kv { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 12px; }
+  ul { margin: 0; padding-left: 18px; font-size: 13px; }
+  #map { height: 100%; background: #000; }
+  #map.crosshair { cursor: crosshair; }
+  label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  textarea { width: 100%; height: 90px; font: 11px var(--mono); background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; }
+  .legend { display: grid; gap: 3px; font-size: 12px; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid var(--line); }
+  .bar { display: flex; height: 10px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); margin: 6px 0; }
+  .wtable { width: 100%; font-size: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .wtable td { padding: 2px 0; } .wtable td:last-child { text-align: right; font-family: var(--mono); }
+  @media (max-width: 700px) { body { grid-template-columns: 1fr; grid-template-rows: auto 60vh; } aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; } }
+</style>
+</head>
+<body>
+<aside>
+  <div>
+    <h1>Prueba técnica · Mapa de Marte</h1>
+    <div class="hint">Leaflet 1.9.4 + teselas NASA Mars Trek (equirectangular)</div>
+    <a href="mision.html?m=gale" style="display:inline-block;margin-top:8px;color:var(--accent);font-weight:600">Misión EVA Monte Sharp →</a>
+    <a href="mision.html?m=jezero" style="display:inline-block;margin-top:4px;color:var(--accent);font-weight:600">Misión EVA Delta de Jezero →</a>
+  </div>
+
+  <section>
+    <h2>1 · Región</h2>
+    <select id="region">
+      <option value="18.4,77.5,6">Cráter Jezero (Perseverance)</option>
+      <option value="-5.4,137.8,5">Cráter Gale (Curiosity)</option>
+      <option value="18.6,-133.8,4">Olympus Mons</option>
+      <option value="-8,-75,3">Valles Marineris</option>
+      <option value="-40,85,3">Hellas Planitia (zona de tu enlace)</option>
+      <option value="45,60,2">Latitudes medias norte (hielo)</option>
+      <option value="0,0,1">Marte completo</option>
+    </select>
+  </section>
+
+  <section>
+    <h2>2 · Capas</h2>
+    <label><input type="radio" name="base" id="b-mola" value="mola" checked> Relieve MOLA (color)</label>
+    <label><input type="radio" name="base" id="b-viking" value="viking"> Mosaico Viking (color)</label>
+    <label><input type="checkbox" id="o-viking"> Viking superpuesto</label>
+    <label>Opacidad <input type="range" id="o-opacity" min="0" max="1" step="0.05" value="0.6"></label>
+    <label><input type="checkbox" id="o-grid" checked> Retícula 10° / 30°</label>
+    <label><input type="checkbox" id="o-sites" checked> Sitios de aterrizaje</label>
+  </section>
+
+  <section>
+    <h2>Agua y hielo</h2>
+    <label><input type="checkbox" id="w-valleys" checked> Valles y canales</label>
+    <label><input type="checkbox" id="w-zones" checked> Zonas de hielo y paleolagos</label>
+    <label><input type="checkbox" id="w-points" checked> Indicios puntuales</label>
+    <label>Cercanía a valle <input type="range" id="w-buf" min="5" max="100" step="5" value="25"> <span class="kv" id="w-buf-v">25 km</span></label>
+    <div id="legend" class="legend"></div>
+    <div class="hint">Geometrías aproximadas, digitalizadas a mano para la prueba.</div>
+  </section>
+
+  <section>
+    <h2>3 · Herramienta</h2>
+    <div class="modes" role="group">
+      <button id="m-pan" aria-pressed="true">Navegar</button>
+      <button id="m-point" aria-pressed="false">Punto</button>
+      <button id="m-route" aria-pressed="false">Ruta</button>
+      <button id="m-suggest" aria-pressed="false">Sugerir</button>
+    </div>
+    <div class="hint" id="mode-hint">Arrastrá para moverte.</div>
+    <div class="row">
+      <button id="undo">Deshacer vértice</button>
+      <button id="clear">Borrar todo</button>
+    </div>
+    <div class="row">
+      <button id="ex-hellas">Ejemplo: Hellas</button>
+      <button id="ex-jezero">Ejemplo: Jezero</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ruta sugerida</h2>
+    <label>Pendiente máxima <input type="range" id="s-slope" min="3" max="30" step="1" value="12"> <span class="kv" id="s-slope-v">12°</span></label>
+    <label>Preferencia por agua <input type="range" id="s-pref" min="0" max="0.8" step="0.1" value="0.5"> <span class="kv" id="s-pref-v">0.5</span></label>
+    <div class="row">
+      <button id="s-run">Recalcular entre extremos</button>
+    </div>
+    <div class="status" id="s-status">Elegí "Sugerir" y hacé clic en el inicio y en el destino.</div>
+    <div id="s-profile"></div>
+  </section>
+
+  <section>
+    <h2>Ruta</h2>
+    <div class="kv" id="route-info">Sin ruta</div>
+    <div id="route-water"></div>
+  </section>
+
+  <section>
+    <h2>Puntos</h2>
+    <ul id="points"><li class="hint">Ninguno</li></ul>
+  </section>
+
+  <section>
+    <h2>Cursor</h2>
+    <div class="kv" id="cursor">—</div>
+  </section>
+
+  <section>
+    <h2>GeoJSON</h2>
+    <div class="row"><button id="export">Exportar</button><button id="import">Importar</button></div>
+    <textarea id="geojson" spellcheck="false" placeholder="Una coordenada por línea, por ejemplo:&#10;-4.80, 137.39&#10;Jezero: 18.44N 77.45E&#10;o pegá un GeoJSON"></textarea>
+    <div class="hint" id="import-msg"></div>
+  </section>
+</aside>
+<div id="map"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="coords.js"></script>
+<script src="agua.js"></script>
+<script src="ruta.js"></script>
+<script>
+// --- Constantes de Marte ---
+const R_MARS_KM = 3389.5;   // radio medio IAU
+const R_EARTH_KM = 6371;
+
+// --- Mapa en proyección geográfica (lat/lon planos). EPSG4326 en Leaflet = 2x1 teselas en zoom 0,
+// igual que la rejilla "default028mm" de Mars Trek. El nombre del CRS es terrestre, pero solo se usa la proyección.
+const map = L.map('map', {
+  crs: L.CRS.EPSG4326,
+  center: [18.4, 77.5], zoom: 6,
+  minZoom: 0, maxZoom: 10,
+  maxBounds: [[-90, -200], [90, 200]],
+  worldCopyJump: false,
+  attributionControl: true,
+});
+
+const trek = (id, maxNative) => L.tileLayer(
+  `https://trek.nasa.gov/tiles/Mars/EQ/${id}/1.0.0/default/default028mm/{z}/{y}/{x}.jpg`,
+  { noWrap: true, bounds: [[-90, -180], [90, 180]], maxNativeZoom: maxNative, tileSize: 256,
+    attribution: 'Teselas: <a href="https://trek.nasa.gov/mars/" target="_blank">NASA/JPL Mars Trek</a>' });
+
+const bases = {
+  mola: trek('Mars_MGS_MOLA_ClrShade_merge_global_463m', 7),
+  viking: trek('Mars_Viking_MDIM21_ClrMosaic_global_232m', 7),
+};
+let currentBase = bases.mola.addTo(map);
+const vikingOverlay = trek('Mars_Viking_MDIM21_ClrMosaic_global_232m', 7).setOpacity(0.6);
+
+let tileErrors = 0;
+Object.values(bases).concat(vikingOverlay).forEach(l => l.on('tileerror', () => { tileErrors++; }));
+
+// --- Retícula ---
+const grid = L.layerGroup();
+for (let lon = -180; lon <= 180; lon += 10)
+  L.polyline([[-90, lon], [90, lon]], { color: '#fff', weight: lon % 30 ? 0.4 : 1, opacity: 0.5, interactive: false }).addTo(grid);
+for (let lat = -90; lat <= 90; lat += 10)
+  L.polyline([[lat, -180], [lat, 180]], { color: '#fff', weight: lat % 30 ? 0.4 : 1, opacity: 0.5, interactive: false }).addTo(grid);
+grid.addTo(map);
+
+// --- Sitios (capa GeoJSON de ejemplo; lon este positiva, -180..180) ---
+const sitesData = { type: 'FeatureCollection', features: [
+  ['Perseverance (Jezero)', 77.45, 18.44], ['Curiosity (Gale)', 137.42, -4.59],
+  ['InSight (Elysium)', 135.62, 4.50], ['Viking 1', -49.97, 22.27], ['Viking 2', 134.29, 47.97],
+  ['Opportunity', -5.53, -1.95], ['Spirit', 175.47, -14.57], ['Zhurong (Utopia)', 109.93, 25.07],
+].map(([name, lon, lat]) => ({ type: 'Feature', properties: { name }, geometry: { type: 'Point', coordinates: [lon, lat] } })) };
+const sites = L.geoJSON(sitesData, {
+  pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: '#fff', weight: 1.5, fillColor: '#3fa7d6', fillOpacity: 1 }),
+  onEachFeature: (f, l) => l.bindTooltip(f.properties.name),
+}).addTo(map);
+
+// --- Controles de capas ---
+document.querySelectorAll('input[name=base]').forEach(r => r.addEventListener('change', e => {
+  map.removeLayer(currentBase); currentBase = bases[e.target.value].addTo(map); currentBase.bringToBack();
+}));
+const toggle = (id, layer) => document.getElementById(id).addEventListener('change', e => e.target.checked ? layer.addTo(map) : map.removeLayer(layer));
+toggle('o-viking', vikingOverlay); toggle('o-grid', grid); toggle('o-sites', sites);
+document.getElementById('o-opacity').addEventListener('input', e => vikingOverlay.setOpacity(+e.target.value));
+L.control.scale({ imperial: false }).addTo(map); // OJO: usa radio terrestre (ver bloqueos)
+
+// --- Agua y hielo ---
+const water = buildWaterLayers();
+water.zones.addTo(map); water.valleys.addTo(map); water.points.addTo(map);
+toggle('w-zones', water.zones); toggle('w-valleys', water.valleys); toggle('w-points', water.points);
+let bufKm = 25;
+document.getElementById('w-buf').addEventListener('input', e => {
+  bufKm = +e.target.value; document.getElementById('w-buf-v').textContent = bufKm + ' km'; renderRoute();
+});
+document.getElementById('legend').innerHTML = Object.entries(WATER_CATS).filter(([k]) => k !== 'ninguno')
+  .map(([, c]) => `<div><span class="sw" style="background:${c.color}"></span>${c.label}</div>`).join('');
+
+// --- Geodesia con radio marciano ---
+function haversine(a, b, R) {
+  const toR = Math.PI / 180, dLat = (b.lat - a.lat) * toR, dLon = (b.lng - a.lng) * toR;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const fmt = ll => {
+  const e360 = ((ll.lng % 360) + 360) % 360;
+  return `${ll.lat.toFixed(4)}°, ${ll.lng.toFixed(4)}°E (${e360.toFixed(4)}°E 0–360)`;
+};
+
+// --- Estado de dibujo ---
+let mode = 'pan';
+const pointsLayer = L.layerGroup().addTo(map);
+const routeLine = L.polyline([], { color: '#000', weight: 8, opacity: 0.45 }).addTo(map); // halo bajo los tramos coloreados
+const routeColored = L.layerGroup().addTo(map);
+const routeVertices = L.layerGroup().addTo(map);
+let points = [];
+
+const hints = { pan: 'Arrastrá para moverte.', point: 'Clic en el mapa para marcar un punto.', route: 'Clic para agregar vértices a la ruta. Doble clic termina.', suggest: 'Clic en el inicio y después en el destino.' };
+const MODES = ['pan', 'point', 'route', 'suggest'];
+function setMode(m) {
+  mode = m;
+  MODES.forEach(k => document.getElementById('m-' + k).setAttribute('aria-pressed', k === m));
+  document.getElementById('mode-hint').textContent = hints[m];
+  document.getElementById('map').classList.toggle('crosshair', m !== 'pan');
+  m === 'route' ? map.doubleClickZoom.disable() : map.doubleClickZoom.enable();
+}
+MODES.forEach(k => document.getElementById('m-' + k).onclick = () => { setMode(k); if (k === 'suggest') { suggestStart = null; suggestLayer.clearLayers(); } });
+
+function addPoint(ll, name) {
+  name = name || `P${points.length + 1}`;
+  const m = L.marker(ll, { draggable: true }).bindTooltip(name, { permanent: true, direction: 'right' }).addTo(pointsLayer);
+  const p = { name, marker: m };
+  m.on('dragend', renderPoints);
+  points.push(p); renderPoints();
+}
+function renderPoints() {
+  const ul = document.getElementById('points');
+  ul.innerHTML = points.length ? '' : '<li class="hint">Ninguno</li>';
+  points.forEach(p => { const li = document.createElement('li'); li.className = 'kv'; li.textContent = `${p.name}: ${fmt(p.marker.getLatLng())}`; ul.appendChild(li); });
+}
+function addVertex(ll, skipRender) {
+  routeLine.addLatLng(ll);
+  L.circleMarker(ll, { radius: 3, color: '#ffd166', fillOpacity: 1 }).addTo(routeVertices);
+  if (!skipRender) renderRoute();
+}
+function setRoute(coords) {
+  routeLine.setLatLngs([]); routeVertices.clearLayers();
+  coords.forEach(c => addVertex(L.latLng(c[0], c[1]), true));
+  renderRoute();
+}
+function renderRoute() {
+  const lls = routeLine.getLatLngs();
+  let mars = 0, earth = 0;
+  for (let i = 1; i < lls.length; i++) { mars += haversine(lls[i - 1], lls[i], R_MARS_KM); earth += haversine(lls[i - 1], lls[i], R_EARTH_KM); }
+  document.getElementById('route-info').innerHTML = lls.length < 2 ? (lls.length ? '1 vértice' : 'Sin ruta') :
+    `${lls.length} vértices<br>Longitud (R Marte): <b>${mars.toFixed(2)} km</b><br>Con R Tierra sería: ${earth.toFixed(2)} km<br>(error si no se corrige: ×${(R_EARTH_KM / R_MARS_KM).toFixed(2)})`;
+  renderWater(lls);
+}
+function renderWater(lls) {
+  routeColored.clearLayers();
+  const out = document.getElementById('route-water');
+  if (lls.length < 2) { out.innerHTML = ''; return; }
+  const a = analyzeRoute(lls, bufKm);
+  a.segments.forEach(s => L.polyline(s.coords, { color: WATER_CATS[s.cat].color, weight: s.cat === 'ninguno' ? 3 : 5, interactive: false }).addTo(routeColored));
+  const cats = Object.keys(WATER_CATS).filter(k => a.totals[k]);
+  const pct = k => (100 * a.totals[k] / a.totalKm);
+  const feats = [...a.features.entries()].map(([n, c]) => `<li><span class="sw" style="background:${WATER_CATS[c].color}"></span>${n}</li>`).join('');
+  out.innerHTML = `<div class="bar">${cats.map(k => `<span style="width:${pct(k)}%;background:${WATER_CATS[k].color}" title="${WATER_CATS[k].label}"></span>`).join('')}</div>
+    <table class="wtable">${cats.map(k => `<tr><td><span class="sw" style="background:${WATER_CATS[k].color}"></span>${WATER_CATS[k].label}</td><td>${a.totals[k].toFixed(1)} km · ${pct(k).toFixed(0)}%</td></tr>`).join('')}</table>
+    ${feats ? `<div class="hint" style="margin-top:6px">Atraviesa o pasa cerca de:</div><ul style="list-style:none;padding:0">${feats}</ul>` : ''}`;
+}
+
+// --- Ruta sugerida ---
+const suggestLayer = L.layerGroup().addTo(map);
+let suggestStart = null, suggestBusy = false;
+const sStatus = (msg, err) => { const el = document.getElementById('s-status'); el.textContent = msg; el.classList.toggle('err', !!err); };
+const endMarker = (ll, label) => L.circleMarker(ll, { radius: 7, color: '#fff', weight: 2, fillColor: label === 'Inicio' ? '#06d6a0' : '#ef476f', fillOpacity: 1 })
+  .bindTooltip(label, { permanent: true, direction: 'top' }).addTo(suggestLayer);
+async function runSuggest(a, b) {
+  if (suggestBusy) return; suggestBusy = true;
+  suggestLayer.clearLayers(); endMarker(a, 'Inicio'); endMarker(b, 'Destino');
+  sStatus('Descargando elevación y calculando…');
+  try {
+    const r = await suggestRoute([a.lat, a.lng], [b.lat, b.lng], {
+      maxSlopeDeg: +document.getElementById('s-slope').value, waterPref: +document.getElementById('s-pref').value, bufKm });
+    setRoute(r.path);
+    const s = r.stats;
+    sStatus(`${s.km.toFixed(0)} km · sube ${s.up.toFixed(0)} m · baja ${s.down.toFixed(0)} m · pendiente máx. ${s.maxSlope.toFixed(1)}°\nGrilla ${s.grid} (celda ${s.cellKm.toFixed(1)} km, zoom ${s.zoom}, ${s.tiles} teselas) · ${s.ms.toFixed(0)} ms`);
+    document.getElementById('s-profile').innerHTML = profileSvg(r.profile);
+  } catch (err) {
+    sStatus(err.message, true); document.getElementById('s-profile').innerHTML = '';
+  } finally { suggestBusy = false; }
+}
+['s-slope', 's-pref'].forEach(id => document.getElementById(id).addEventListener('input', e =>
+  document.getElementById(id + '-v').textContent = id === 's-slope' ? e.target.value + '°' : e.target.value));
+document.getElementById('s-run').onclick = () => {
+  const lls = routeLine.getLatLngs();
+  if (lls.length < 2) return sStatus('Primero marcá inicio y destino con "Sugerir".', true);
+  runSuggest(lls[0], lls[lls.length - 1]);
+};
+
+map.on('click', e => {
+  if (mode === 'point') addPoint(e.latlng);
+  else if (mode === 'route') addVertex(e.latlng);
+  else if (mode === 'suggest') {
+    if (!suggestStart) { suggestStart = e.latlng; suggestLayer.clearLayers(); endMarker(e.latlng, 'Inicio'); sStatus('Ahora hacé clic en el destino.'); }
+    else { const a = suggestStart; suggestStart = null; setMode('pan'); runSuggest(a, e.latlng); }
+  }
+});
+map.on('dblclick', () => { if (mode === 'route') setMode('pan'); });
+let elevTimer = null;
+map.on('mousemove', e => {
+  const el = document.getElementById('cursor'), base = fmt(e.latlng) + `  z${map.getZoom()}`;
+  el.textContent = base;
+  clearTimeout(elevTimer);
+  elevTimer = setTimeout(async () => { const h = await elevationAt(e.latlng.lat, e.latlng.lng); if (!isNaN(h)) el.textContent = base + `\nElevación ≈ ${(h / 1000).toFixed(2)} km`; }, 120);
+});
+
+document.getElementById('undo').onclick = () => {
+  const lls = routeLine.getLatLngs(); if (!lls.length) return;
+  lls.pop(); routeLine.setLatLngs(lls);
+  const vs = routeVertices.getLayers(); routeVertices.removeLayer(vs[vs.length - 1]); renderRoute();
+};
+document.getElementById('clear').onclick = () => {
+  pointsLayer.clearLayers(); points = []; routeLine.setLatLngs([]); routeVertices.clearLayers(); suggestLayer.clearLayers();
+  document.getElementById('s-profile').innerHTML = ''; renderPoints(); renderRoute();
+};
+function loadExample(key) {
+  const ex = EXAMPLE_ROUTES[key];
+  suggestLayer.clearLayers(); document.getElementById('s-profile').innerHTML = '';
+  setRoute(ex.coords);
+  map.setView([ex.view[0], ex.view[1]], ex.view[2]);
+}
+document.getElementById('ex-hellas').onclick = () => loadExample('hellas');
+document.getElementById('ex-jezero').onclick = () => loadExample('jezero');
+
+// --- GeoJSON (lon este positiva -180..180, sistema IAU Mars 2000 planetocéntrico) ---
+document.getElementById('export').onclick = () => {
+  const fc = { type: 'FeatureCollection', crs_note: 'IAU_2015:49900 (Mars 2000 planetocéntrico, lon E ±180)', features: [] };
+  points.forEach(p => { const ll = p.marker.getLatLng(); fc.features.push({ type: 'Feature', properties: { name: p.name }, geometry: { type: 'Point', coordinates: [+ll.lng.toFixed(6), +ll.lat.toFixed(6)] } }); });
+  const r = routeLine.getLatLngs();
+  if (r.length > 1) fc.features.push({ type: 'Feature', properties: { name: 'Ruta' }, geometry: { type: 'LineString', coordinates: r.map(ll => [+ll.lng.toFixed(6), +ll.lat.toFixed(6)]) } });
+  document.getElementById('geojson').value = JSON.stringify(fc, null, 1);
+};
+document.getElementById('import').onclick = () => {
+  const msg = document.getElementById('import-msg');
+  try {
+    const r = parseCoordText(document.getElementById('geojson').value);
+    r.points.forEach(p => addPoint(L.latLng(p.lat, p.lon), p.name || undefined));
+    if (r.lines.length) setRoute(r.lines.flatMap(l => l.coords));
+    const all = r.points.map(p => [p.lat, p.lon]).concat(r.lines.flatMap(l => l.coords));
+    if (all.length === 1) map.setView(all[0], Math.max(map.getZoom(), 6)); else if (all.length) map.fitBounds(all, { maxZoom: 8, padding: [30, 30] });
+    msg.style.color = '';
+    msg.textContent = `Importado: ${r.points.length} punto(s)${r.lines.length ? ` y ${r.lines.length} línea(s)` : ''}.` + (r.errors.length ? ` Se saltearon ${r.errors.length} línea(s): ${r.errors.join(' · ')}` : '');
+  } catch (err) { msg.style.color = 'var(--accent)'; msg.textContent = 'No se pudo importar. ' + err.message; }
+};
+
+// --- Región inicial + demo ---
+const goRegion = v => { const [lat, lon, z] = v.split(',').map(Number); map.setView([lat, lon], z); };
+document.getElementById('region').addEventListener('change', e => goRegion(e.target.value));
+goRegion(document.getElementById('region').value);
+// Datos de ejemplo: punto en Perseverance y ruta por Harmakhis Vallis hacia los glaciares de Hellas
+addPoint(L.latLng(18.4447, 77.4508), 'Perseverance');
+loadExample('hellas');
+// Al abrir, sugerir una ruta entre los extremos del ejemplo de Hellas
+runSuggest(L.latLng(-41, 88.5), L.latLng(-43, 107));
+
+window.__diag = () => ({ tileErrors, zoom: map.getZoom(), center: map.getCenter() });
+</script>
+</body>
+</html>
