@@ -479,8 +479,17 @@ function plan() {
     const remaining = P.start + P.eva - elapsedAtStop;
     const margin = remaining - returnLeg.hours - EVA_RETURN_TIME_RESERVE_HOURS;
     const returnO2Kg = returnLeg.hours * (EVA_RESOURCE_ESTIMATES.metabolicO2KgPerHour + EVA_RESOURCE_ESTIMATES.leakageO2KgPerHour + extraO2Rate);
-    returnRows.push(`<tr><td>${leg.to.label}</td><td class="r">${fmtH(returnLeg.hours)}</td><td class="r">${returnO2Kg.toFixed(2)} kg</td></tr>`);
-    if (margin <= 0) alerts.push(['bad', `RETORNO OBLIGATORIO en ${leg.to.label}: quedan ${fmtH(Math.max(0, remaining))}; el regreso por ruta requiere ${fmtH(returnLeg.hours)} más una reserva provisional de ${fmtH(EVA_RETURN_TIME_RESERVE_HOURS)}.`]);
+    const status = margin <= 0 ? 'RETORNO OBLIGATORIO' : 'Margen disponible';
+    returnRows.push(`<section style="min-width:0;padding:8px;margin:6px 0;border:1px solid var(--line);border-radius:8px;background:#1c1714">
+      <div style="font-weight:700;margin-bottom:6px">${leg.to.label} · ${status}</div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;font-size:12px">
+        <div><span class="muted">Tiempo EVA restante</span><br><b>${fmtH(Math.max(0, remaining))}</b></div>
+        <div><span class="muted">Vuelta por ruta</span><br><b>${fmtH(returnLeg.hours)}</b></div>
+        <div><span class="muted">Reserva asumida</span><br><b>${fmtH(EVA_RETURN_TIME_RESERVE_HOURS)}</b></div>
+        <div><span class="muted">Margen resultante</span><br><b>${margin < 0 ? '−' : ''}${fmtH(Math.abs(margin))}</b></div>
+        <div style="grid-column:1/-1"><span class="muted">O₂ estimado para volver*</span> <b>${returnO2Kg.toFixed(2)} kg</b></div>
+      </div></section>`);
+    if (margin <= 0) alerts.push(['bad', `RETORNO OBLIGATORIO en ${leg.to.label}: quedan ${fmtH(Math.max(0, remaining))}; la vuelta requiere ${fmtH(returnLeg.hours)} + ${fmtH(EVA_RETURN_TIME_RESERVE_HOURS)} de reserva = ${fmtH(returnLeg.hours + EVA_RETURN_TIME_RESERVE_HOURS)}. Margen: −${fmtH(Math.abs(margin))}.`]);
   });
   if (maxS > P.maxSlope * 0.85) alerts.push(['warn', `Hay tramos de ${maxS.toFixed(0)}°, cerca del límite de ${P.maxSlope}°. Ir con bastones y en fila.`]);
   if (!sun) alerts.push(['warn', 'No se pudo validar el horario de luz. Confirmá la salida y la puesta del sol antes de considerar apta esta EVA.']);
@@ -490,7 +499,7 @@ function plan() {
   if (!alerts.length) alerts.push(['ok', 'Sin alertas: la ruta respeta pendiente, autonomía, distancia de regreso, retorno por tiempo y horario de luz.']);
   $('alerts').innerHTML = alerts.map(a => `<div class="alert ${a[0]}">${a[1]}</div>`).join('');
   $('timeline').innerHTML = `<table><tr><th>Tramo</th><th class="r">Dist.</th><th class="r">Camino</th><th class="r">Llegada</th><th class="r">Trabajo</th></tr>${rows.join('')}</table>
-    <div style="margin-top:8px"><b>Orientación de regreso por parada</b><table><tr><th>Desde</th><th class="r">Vuelta</th><th class="r">O₂ estimado para volver*</th></tr>${returnRows.join('')}</table></div>
+    <div style="min-width:0;margin-top:8px"><b>Por qué volver</b><div class="muted" style="margin:2px 0 6px">Estimación al llegar a cada parada</div>${returnRows.join('')}</div>
     <div class="muted" style="margin-top:6px">Sube ${up.toFixed(0)} m · baja ${down.toFixed(0)} m · salida ${fmtClock(P.start)} · regreso ${fmtClock(P.start + hours)}. Reserva de retorno: ${fmtH(EVA_RETURN_TIME_RESERVE_HOURS)} (supuesto provisional del prototipo; no validado para Marte). *O₂ calculado con tasas provisionales; no equivale a autonomía ni se compara con capacidad del tanque, que no está definida.</div>`;
   $('profile').innerHTML = profileSvg(prof);
   // Barra superior
