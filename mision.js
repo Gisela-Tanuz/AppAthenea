@@ -16,6 +16,7 @@ const TREK_IMG = 'https://trek.nasa.gov/mars/trekarcgis/rest/services';
 const CELL_M = 10;                                         // celda de la grilla de navegación
 const CELL_DEG = CELL_M / DEG_M;
 const MID_LAT = (BBOX.s + BBOX.n) / 2;
+const TERRAIN_TIMEOUT_MS = 30_000;
 // RAD (Hassler et al. 2014, Science): dosis equivalente medida por Curiosity en la superficie de Gale ≈ 0,64 mSv/día.
 const RAD = { mSvDay: 0.64, careerLimit: 600 };            // límite de carrera NASA-STD-3001 (2022): 600 mSv
 const STATION_DEFS = M.stations;
@@ -70,6 +71,63 @@ const bindToggle = (id, layer) => $(id).addEventListener('change', e => e.target
 $('l-dem').addEventListener('change', e => e.target.checked ? demLayer.addTo(map) : map.removeLayer(demLayer));
 bindToggle('l-themis', themis);
 
+// Unidad geológica cartografiada de Jezero; no representa una ubicación de muestra confirmada.
+const geologyLayer = L.geoJSON(null, {
+  style: { color: '#d7b56d', weight: 1.5, opacity: 0.65, fillColor: '#c79b4b', fillOpacity: 0.4 },
+  onEachFeature: (feature, layer) => layer.bindPopup(
+    '<b>NHjf₂ · abanico 2 de Jezero</b><br>Unidad geológica cartografiada; no representa una ubicación de muestra confirmada.<br><i>Fuente: NHjf2_CTX.gpkg</i>'
+  )
+});
+let geologyFeatures = null;
+let geologyState = MISSION_ID === 'jezero' ? 'loading' : 'unavailable';
+function pointInRing(point, ring) {
+  const [x, y] = point; let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    const cross = (x - xi) * (yj - yi) - (y - yi) * (xj - xi);
+    if (Math.abs(cross) < 1e-10 && x >= Math.min(xi, xj) - 1e-10 && x <= Math.max(xi, xj) + 1e-10 && y >= Math.min(yi, yj) - 1e-10 && y <= Math.max(yi, yj) + 1e-10) return true;
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function pointInMultiPolygon(point, features) {
+  return features.some(feature => {
+    const geometry = feature.geometry;
+    const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.type === 'MultiPolygon' ? geometry.coordinates : [];
+    return polygons.some(polygon => pointInRing(point, polygon[0]) && !polygon.slice(1).some(hole => pointInRing(point, hole)));
+  });
+}
+function geologyContextForStation(station) {
+  if (MISSION_ID !== 'jezero') return '';
+  if (geologyState === 'loading') return 'Cargando contexto geológico NHjf₂…';
+  if (geologyState !== 'ready') return 'Contexto geológico NHjf₂ no disponible.';
+  const inside = pointInMultiPolygon([station.ll[1], station.ll[0]], geologyFeatures);
+  return inside
+    ? 'Dentro de la unidad cartografiada NHjf₂; no confirma una ubicación de muestra.'
+    : 'Fuera/no asignada a NHjf₂; no se infiere otra unidad geológica.';
+}
+const geologyToggle = $('l-geology');
+geologyToggle.closest('label').hidden = MISSION_ID !== 'jezero';
+bindToggle('l-geology', geologyLayer);
+if (MISSION_ID === 'jezero') {
+  fetch('data/jezero-geology.geojson')
+    .then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then(data => {
+      geologyLayer.addData(data);
+      geologyFeatures = data.features;
+      geologyState = 'ready';
+      renderStations();
+    })
+    .catch(error => {
+      geologyState = 'unavailable';
+      renderStations();
+      console.warn('Could not load the Jezero geology layer:', error);
+    });
+}
+
 // Rover: recorrido y paradas coloreadas por inclinación medida
 const trav = L.polyline(ROVER.traverse, { color: '#ffffff', weight: 2, opacity: 0.8, dashArray: '4 4', interactive: false }).addTo(map);
 const wpLayer = L.layerGroup().addTo(map);
@@ -102,9 +160,21 @@ async function fetchElevation(nx, ny) {
   const e = BBOX.w + nx * CELL_DEG, s = BBOX.n - ny * CELL_DEG;
   const url = `${TREK_IMG}/${M.dem.service}/ImageServer/exportImage?bbox=${BBOX.w},${s},${e},${BBOX.n}` +
     `&size=${w},${h}&format=bsq&pixelType=F32&interpolation=RSP_BilinearInterpolation&f=image`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  const buf = await r.arrayBuffer();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TERRAIN_TIMEOUT_MS);
+  let buf;
+  try {
+    const r = await fetch(url, { signal: controller.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    buf = await r.arrayBuffer();
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`tiempo de espera agotado (${TERRAIN_TIMEOUT_MS / 1000} s)`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (buf.byteLength < w * h * 4) throw new Error(`respuesta incompleta (${buf.byteLength} bytes)`);
   const f = new Float32Array(buf.slice(0, w * h * 4));
   const raw = new Float32Array(nx * ny);
@@ -187,13 +257,14 @@ function renderStations() {
   const box = $('stations'); box.innerHTML = '';
   stations.forEach((s, k) => {
     s.label = 'E' + (k + 1);
+    const geologyContext = geologyContextForStation(s);
     const m = L.marker(s.ll, { draggable: true, opacity: s.on ? 1 : 0.45, icon: L.divIcon({ className: 'st-icon', html: s.label, iconSize: [26, 26] }) })
-      .bindTooltip(`<b>${s.label} · ${s.name}</b><br>${s.obj}<br><i>${s.src}</i>`).addTo(stLayer);
+      .bindTooltip(`<b>${s.label} · ${s.name}</b><br>${s.obj}<br><i>${s.src}</i>${geologyContext ? `<br>${geologyContext}` : ''}`).addTo(stLayer);
     m.on('dragend', () => { const p = m.getLatLng(); s.ll = [p.lat, p.lng]; s.src = 'Movida a mano'; renderStations(); schedulePlan(); });
     const el = document.createElement('div'); el.className = 'st';
     el.innerHTML = `<input type="checkbox" id="st-${k}" ${s.on ? 'checked' : ''} aria-label="Incluir ${s.name}">
       <div><span class="n">${s.label} · ${s.name}</span></div><span class="t">${s.min} min</span>
-      <div class="o">${s.obj}<br><i>${s.src}</i></div>`;
+      <div class="o">${s.obj}<br><i>${s.src}</i>${geologyContext ? `<br>${geologyContext}` : ''}</div>`;
     const go = document.createElement('button'); go.textContent = 'Ver'; go.onclick = () => map.setView(s.ll, 17);
     el.querySelector('.t').after(go); el.style.gridTemplateColumns = '22px 1fr auto auto';
     el.querySelector('input').onchange = e => { s.on = e.target.checked; renderStations(); schedulePlan(); };
@@ -302,6 +373,7 @@ function plan() {
   const sel = stations.filter(s => s.on);
   const stops = [{ label: 'Base', name: 'Base', ll: habLL, min: 0 }, ...sel, { label: 'Base', name: 'Regreso a base', ll: habLL, min: 0 }];
   const legs = [], alerts = [];
+  if (M.dem.coarse) alerts.push(['warn', 'Terreno de baja resolución (HRSC + MOLA, 200 m): esta ruta es preliminar; el relieve y los peligros locales no están validados. Revisar HiRISE y marcar obstáculos antes de usarla.']);
   for (let k = 1; k < stops.length; k++) {
     const r = legPath(stops[k - 1].ll, stops[k].ll, P, B);
     if (!r) { alerts.push(['bad', `No hay camino a pie de ${stops[k - 1].label} a ${stops[k].label} con pendientes de hasta ${P.maxSlope}° y los obstáculos marcados. Probá subir la pendiente máxima o mover la parada.`]); legs.push(null); continue; }
@@ -345,7 +417,8 @@ function plan() {
   $('profile').innerHTML = profileSvg(prof);
   // Barra superior
   const verdict = alerts.some(a => a[0] === 'bad') ? 'bad' : alerts.some(a => a[0] === 'warn') ? 'warn' : 'ok';
-  $('verdict').className = verdict; $('verdict').textContent = { ok: 'EVA APTA', warn: 'EVA CON PRECAUCIÓN', bad: 'EVA NO APTA' }[verdict];
+  $('verdict').className = verdict;
+  $('verdict').textContent = verdict === 'bad' ? 'EVA NO APTA' : M.dem.coarse ? 'RUTA PRELIMINAR' : verdict === 'warn' ? 'EVA CON PRECAUCIÓN' : 'EVA APTA';
   setChip('c-time', fmtH(hours), hours > P.eva ? 'bad' : '');
   setChip('c-res', reserve >= 0 ? fmtH(reserve) : '−' + fmtH(-reserve), reserve < 0 ? 'bad' : reserve < 1 ? 'warn' : 'ok');
   setChip('c-dist', km.toFixed(2) + ' km');
@@ -449,6 +522,7 @@ renderStations(); drawWalk();
 loadDonki(); loadWeather();
 (async () => {
   const t0 = performance.now();
+  $('verdict').textContent = 'CARGANDO TERRENO…';
   try { T = await buildTerrain(); }
   catch (e) {
     $('verdict').className = 'bad'; $('verdict').textContent = 'SIN TERRENO';
@@ -465,18 +539,23 @@ loadDonki(); loadWeather();
   const mae = mean(pairs.map(p => Math.abs(p[0] - p[1])));
   const mx = mean(pairs.map(p => p[0])), my = mean(pairs.map(p => p[1]));
   const cov = mean(pairs.map(p => (p[0] - mx) * (p[1] - my))), sx = Math.sqrt(mean(pairs.map(p => (p[0] - mx) ** 2))), sy = Math.sqrt(mean(pairs.map(p => (p[1] - my) ** 2)));
+  const slopeCorrelation = cov / (sx * sy);
+  const slopeCorrelationText = Number.isFinite(slopeCorrelation) ? slopeCorrelation.toFixed(2) : 'Sin datos';
   $('quality').innerHTML = `<table>
     <tr><td>Fuente de elevación</td><td class="r">${M.dem.label}</td></tr>
-    <tr><td>Grilla de navegación</td><td class="r">${T.nx}×${T.ny} celdas de ${CELL_M} m</td></tr>
+    ${M.dem.coarse ? `<tr><td>Resolución nativa del terreno</td><td class="r">≈200 m/píxel</td></tr>` : ''}
+    <tr><td>Paso de cálculo de ruta</td><td class="r">${T.nx}×${T.ny} celdas de ${CELL_M} m${M.dem.coarse ? ' (interpoladas)' : ''}</td></tr>
     <tr><td>Celdas sin datos</td><td class="r">${T.missing}</td></tr>
-    <tr><td>Paradas de ${M.rover.name} en la zona</td><td class="r">${pairs.length}</td></tr>
-    <tr><td>Altura: diferencia con el rover (desvío fijo / error)</td><td class="r">${eBias.toFixed(1)} m / ${eErr.toFixed(1)} m</td></tr>
-    <tr><td>Pendiente media calculada / medida por el rover</td><td class="r">${mx.toFixed(1)}° / ${my.toFixed(1)}°</td></tr>
-    <tr><td>Diferencia media de pendiente</td><td class="r">${mae.toFixed(1)}°</td></tr>
-    <tr><td>Correlación de pendiente</td><td class="r">${(cov / (sx * sy)).toFixed(2)}</td></tr>
+    <tr><td>Puntos comparados con ${M.rover.name}</td><td class="r">${pairs.length}</td></tr>
+    <tr><td>Altura: sesgo medio / MAE sin sesgo</td><td class="r">${eBias.toFixed(1)} m / ${eErr.toFixed(1)} m</td></tr>
+    <tr><td>Inclinación media: terreno / rover</td><td class="r">${mx.toFixed(1)}° / ${my.toFixed(1)}°</td></tr>
+    <tr><td>Diferencia media de inclinación</td><td class="r">${mae.toFixed(1)}°</td></tr>
+    <tr><td>Correlación lineal terreno–rover (−1 a 1)</td><td class="r">${slopeCorrelationText}</td></tr>
     <tr><td>Tiempo de preparación</td><td class="r">${((performance.now() - t0) / 1000).toFixed(1)} s</td></tr></table>
-    <div class="muted">La inclinación del rover incluye rocas y ondulaciones de menos de 10 m que la grilla no ve; por eso la pendiente calculada tiende a ser menor.${M.dem.coarse ? ' <b>En esta misión la elevación es de baja resolución (200 m): las pendientes locales no se ven y el margen de seguridad depende de los obstáculos marcados a mano.</b>' : ''}</div>`;
-  if (M.dem.coarse) $('alerts-static').innerHTML = `<div class="alert warn">Elevación de baja resolución (${M.dem.label}): la ruta no ve escalones ni pendientes de menos de ~200 m. Marcar obstáculos al revisar la imagen HiRISE.</div>`;
-  window.__quality = { mae, n: pairs.length, mx, my, r: cov / (sx * sy), eBias, eErr };
+    <div class="muted">${M.dem.coarse
+      ? '<b>Lectura de calidad:</b> la fuente tiene resolución nativa de ~200 m; la grilla de 10 m solo interpola esos datos y no agrega detalle. Sirve para contexto regional y planificación preliminar, no para detectar rocas, escalones ni pendientes locales. La comparación con el rover es indicativa, no una validación independiente de seguridad.'
+      : 'La inclinación del rover incluye rocas y ondulaciones locales que pueden no aparecer en el modelo. La comparación es indicativa y no constituye una validación independiente de seguridad.'}
+      La correlación resume la relación lineal en ${pairs.length} puntos comparados; un valor cercano a 0 significa que esta muestra no muestra una relación lineal clara. No demuestra que la ruta sea segura ni insegura.</div>`;
+  window.__quality = { mae, n: pairs.length, mx, my, r: slopeCorrelation, eBias, eErr };
   plan();
 })();
