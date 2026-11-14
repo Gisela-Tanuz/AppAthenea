@@ -3,7 +3,9 @@
 // RAD (radiación medida en superficie), DONKI (clima espacial en vivo), REMS/MEDA (meteorología de los rovers).
 
 // ---------- Misión elegida ----------
-const MISSION_ID = (new URLSearchParams(location.search).get('m') || 'gale').toLowerCase();
+const PAGE_PARAMS = new URLSearchParams(location.search);
+const MISSION_ID = (PAGE_PARAMS.get('m') || 'gale').toLowerCase();
+const INITIAL_SCENARIO_ID = PAGE_PARAMS.get('scenario');
 const M = MISSIONS[MISSION_ID] || MISSIONS.gale;
 const ROVER = ROVER_DATA[M.rover.key];
 
@@ -49,7 +51,7 @@ document.getElementById('lbl-wp').textContent = `Paradas de ${M.rover.name} (inc
 document.getElementById('wx-title').textContent = `Meteorología (${M.weather === 'msl' ? 'REMS, Curiosity' : 'MEDA, Perseverance'})`;
 const sel = document.getElementById('mission-select');
 sel.innerHTML = Object.entries(MISSIONS).map(([k, v]) => `<option value="${k}" ${k === MISSION_ID ? 'selected' : ''}>${v.name}</option>`).join('');
-sel.onchange = () => { location.search = '?m=' + sel.value; };
+sel.onchange = () => { const next = new URLSearchParams(location.search); next.set('m', sel.value); location.search = '?' + next.toString(); };
 document.getElementById('p-walk').value = M.defaults.walk;
 document.getElementById('o-walk').textContent = M.defaults.walk + ' km';
 
@@ -117,6 +119,101 @@ const hirise = trek(M.hirise.id, M.hirise.maxN, { bounds: M.hirise.bounds }).add
 let demLayer = M.dem.grayTiles ? trek(M.dem.grayTiles.id, M.dem.grayTiles.maxN, { opacity: 0.55, bounds: M.hirise.bounds }) : L.layerGroup();
 const themis = trek('THEMIS_NightIR_ControlledMosaics_100m_v2_oct2018', 9, { opacity: 0.6 });
 map.fitBounds([[BBOX.s, BBOX.w], [BBOX.n, BBOX.e]]);
+
+// ---------- Guía de escenarios hipotéticos (separada del plan y sus métricas) ----------
+const scenarioSelect = $('scenario-select');
+const scenarioDetail = $('scenario-detail');
+const scenarioById = new Map(SIMULATION_SCENARIOS.map(scenario => [scenario.id, scenario]));
+scenarioSelect.replaceChildren(...SIMULATION_SCENARIOS.map(scenario => {
+  const option = document.createElement('option');
+  option.value = scenario.id;
+  option.textContent = scenario.title;
+  return option;
+}));
+
+function appendScenarioText(parent, tag, text, className) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  element.textContent = text;
+  parent.appendChild(element);
+  return element;
+}
+
+function renderScenario(id) {
+  const scenario = scenarioById.get(id) || SIMULATION_SCENARIOS[0];
+  scenarioSelect.value = scenario.id;
+  const params = new URLSearchParams(location.search);
+  params.set('scenario', scenario.id);
+  history.replaceState(null, '', `${location.pathname}?${params.toString()}${location.hash}`);
+
+  scenarioDetail.replaceChildren();
+  appendScenarioText(scenarioDetail, 'h3', scenario.title, 'scenario-title');
+  appendScenarioText(scenarioDetail, 'p', scenario.driver, 'muted');
+  const ratings = document.createElement('div');
+  ratings.className = 'scenario-rating';
+  appendScenarioText(ratings, 'span', `Probabilidad cualitativa: ${scenario.likelihood}`);
+  appendScenarioText(ratings, 'span', `Severidad cualitativa: ${scenario.severity}`);
+  scenarioDetail.appendChild(ratings);
+  appendScenarioText(scenarioDetail, 'p', `Riesgos del escenario: ${scenario.risks}`, 'muted');
+
+  if (scenario.context) {
+    const context = document.createElement('div');
+    context.className = 'scenario-evidence';
+    appendScenarioText(context, 'strong', `Contexto cartográfico: ${scenario.context.label}`);
+    appendScenarioText(context, 'div', scenario.context.kind, 'muted');
+    const focus = document.createElement('button');
+    focus.type = 'button';
+    focus.textContent = MISSION_ID === scenario.context.mission ? 'Ver área regional en el mapa' : `Abrir contexto ${MISSIONS[scenario.context.mission].name}`;
+    focus.addEventListener('click', () => {
+      if (MISSION_ID !== scenario.context.mission) {
+        const next = new URLSearchParams(location.search);
+        next.set('m', scenario.context.mission);
+        next.set('scenario', scenario.id);
+        location.search = '?' + next.toString();
+        return;
+      }
+      const contextMission = MISSIONS[scenario.context.mission];
+      map.fitBounds([[contextMission.bbox.s, contextMission.bbox.w], [contextMission.bbox.n, contextMission.bbox.e]], { padding: [24, 24] });
+      $('map').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    context.appendChild(focus);
+    appendScenarioText(context, 'div', 'La vista encuadra el área de planificación existente; no ubica ni delimita el peligro.', 'muted');
+    scenarioDetail.appendChild(context);
+  } else {
+    appendScenarioText(scenarioDetail, 'p', 'Sin contexto local cartografiable en las fuentes suministradas; no se marca una ubicación en el mapa.', 'muted');
+  }
+
+  appendScenarioText(scenarioDetail, 'h4', 'Variantes y respuestas');
+  const variants = document.createElement('ol');
+  scenario.variants.forEach(variant => {
+    const item = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = `${variant.id} · ${variant.title}: `;
+    item.append(title, document.createTextNode(variant.response));
+    variants.appendChild(item);
+  });
+  scenarioDetail.appendChild(variants);
+
+  appendScenarioText(scenarioDetail, 'h4', 'Base de evidencia y tipo');
+  scenario.evidence.forEach(item => {
+    const evidence = document.createElement('div');
+    evidence.className = 'scenario-evidence';
+    appendScenarioText(evidence, 'strong', item.kind);
+    appendScenarioText(evidence, 'div', item.text, 'muted');
+    scenarioDetail.appendChild(evidence);
+  });
+  appendScenarioText(scenarioDetail, 'p', `Límite de uso: ${scenario.limitation}`, 'muted');
+  const source = document.createElement('a');
+  source.href = SIMULATION_SCENARIO_SOURCE;
+  source.target = '_blank';
+  source.rel = 'noopener noreferrer';
+  source.textContent = 'Fuente: Simulation Scenarios (documento de planificación aportado)';
+  scenarioDetail.appendChild(source);
+}
+
+scenarioSelect.addEventListener('change', event => renderScenario(event.target.value));
+renderScenario(scenarioById.has(INITIAL_SCENARIO_ID) ? INITIAL_SCENARIO_ID : SIMULATION_SCENARIOS[0].id);
+
 L.rectangle([[BBOX.s, BBOX.w], [BBOX.n, BBOX.e]], { color: '#fff', weight: 1, dashArray: '6 6', fill: false, interactive: false }).addTo(map);
 L.control.scale({ imperial: false }).addTo(map); // nota: Leaflet usa radio terrestre; la escala es orientativa
 
