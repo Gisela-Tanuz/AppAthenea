@@ -26,6 +26,8 @@ const EVA_RESOURCE_ESTIMATES = {
   potableWaterLPerHour: 0.24, // minimum provision, not measured intake
   coolingWaterKgPerHour: 0.45 // sublimator-class analog; architecture may differ on Mars
 };
+// Assumption for the prototype only; no Mars-specific return-time reserve is established.
+const EVA_RETURN_TIME_RESERVE_HOURS = 0.5;
 // User-supplied extraction of Munguira et al. (2023), Table 1; seasonal rover-location proxies, not route forecasts.
 const MEDA_TEMP_RECORDS = {
   25: { season: 'Primavera', sols: '34–40', sun: 'Ls 25°', airMin: '−82,2', airMinTime: '05:00', airMax: '−30,2', airMaxTime: '15:00', surfaceMin: '−81,2', surfaceMinTime: '05:30', surfaceMax: '−0,2', surfaceMaxTime: '12:30' },
@@ -419,7 +421,7 @@ function legPath(a, b, P, B) {
 const routeLayer = L.layerGroup().addTo(map);
 let lastPlan = null, planTimer = null;
 function schedulePlan() { clearTimeout(planTimer); planTimer = setTimeout(plan, 250); }
-$('o2-architecture').addEventListener('change', () => { if (lastPlan) renderConsumables(lastPlan.hours); });
+$('o2-architecture').addEventListener('change', () => { if (lastPlan) schedulePlan(); });
 function plan() {
   if (!T) return;
   const P = params(), B = blockedMask(), habLL = [hab.getLatLng().lat, hab.getLatLng().lng];
@@ -461,15 +463,35 @@ function plan() {
   if (reserve < 0) alerts.push(['bad', `La EVA dura ${fmtH(hours)} y supera la autonomía del traje (${P.eva} h). Quitá paradas o acortá tiempos.`]);
   else if (reserve < 1) alerts.push(['warn', `Reserva de solo ${fmtH(reserve)}. Se recomienda al menos 1 h para imprevistos.`]);
   if (far > P.walk) alerts.push(['bad', `La ruta se aleja ${far.toFixed(2)} km de la base y supera el límite de regreso a pie (${P.walk} km).`]);
+  // Mandatory time-to-return check at each stop. This is a prototype assumption, not a NASA Mars rule.
+  let elapsedAtStop = P.start;
+  const returnRows = [];
+  const extraO2Rate = Number($('o2-architecture').value);
+  legs.forEach((leg, index) => {
+    if (!leg) return;
+    elapsedAtStop += leg.hours + (leg.to.min || 0) / 60;
+    if (index >= legs.length - 1 || leg.to.label === 'Base') return;
+    const returnLeg = legPath(leg.to.ll, habLL, P, B);
+    if (!returnLeg) {
+      alerts.push(['bad', `RETORNO OBLIGATORIO: no se pudo calcular una ruta caminable desde ${leg.to.label} hasta la base.`]);
+      return;
+    }
+    const remaining = P.start + P.eva - elapsedAtStop;
+    const margin = remaining - returnLeg.hours - EVA_RETURN_TIME_RESERVE_HOURS;
+    const returnO2Kg = returnLeg.hours * (EVA_RESOURCE_ESTIMATES.metabolicO2KgPerHour + EVA_RESOURCE_ESTIMATES.leakageO2KgPerHour + extraO2Rate);
+    returnRows.push(`<tr><td>${leg.to.label}</td><td class="r">${fmtH(returnLeg.hours)}</td><td class="r">${returnO2Kg.toFixed(2)} kg</td></tr>`);
+    if (margin <= 0) alerts.push(['bad', `RETORNO OBLIGATORIO en ${leg.to.label}: quedan ${fmtH(Math.max(0, remaining))}; el regreso por ruta requiere ${fmtH(returnLeg.hours)} más una reserva provisional de ${fmtH(EVA_RETURN_TIME_RESERVE_HOURS)}.`]);
+  });
   if (maxS > P.maxSlope * 0.85) alerts.push(['warn', `Hay tramos de ${maxS.toFixed(0)}°, cerca del límite de ${P.maxSlope}°. Ir con bastones y en fila.`]);
   if (!sun) alerts.push(['warn', 'No se pudo validar el horario de luz. Confirmá la salida y la puesta del sol antes de considerar apta esta EVA.']);
   else if (P.start + hours > sun.set - 0.5) alerts.push(['bad', `La EVA termina a las ${fmtClock(P.start + hours)} y la puesta de sol es a las ${fmtClock(sun.set)}. Salir antes.`]);
   if (spaceWeather.level === 'bad') alerts.push(['bad', spaceWeather.msg]);
   else if (spaceWeather.level === 'warn') alerts.push(['warn', spaceWeather.msg]);
-  if (!alerts.length) alerts.push(['ok', 'Sin alertas: la ruta respeta pendiente, autonomía, distancia de regreso y horario de luz.']);
+  if (!alerts.length) alerts.push(['ok', 'Sin alertas: la ruta respeta pendiente, autonomía, distancia de regreso, retorno por tiempo y horario de luz.']);
   $('alerts').innerHTML = alerts.map(a => `<div class="alert ${a[0]}">${a[1]}</div>`).join('');
   $('timeline').innerHTML = `<table><tr><th>Tramo</th><th class="r">Dist.</th><th class="r">Camino</th><th class="r">Llegada</th><th class="r">Trabajo</th></tr>${rows.join('')}</table>
-    <div class="muted" style="margin-top:6px">Sube ${up.toFixed(0)} m · baja ${down.toFixed(0)} m · salida ${fmtClock(P.start)} · regreso ${fmtClock(P.start + hours)}</div>`;
+    <div style="margin-top:8px"><b>Orientación de regreso por parada</b><table><tr><th>Desde</th><th class="r">Vuelta</th><th class="r">O₂ estimado para volver*</th></tr>${returnRows.join('')}</table></div>
+    <div class="muted" style="margin-top:6px">Sube ${up.toFixed(0)} m · baja ${down.toFixed(0)} m · salida ${fmtClock(P.start)} · regreso ${fmtClock(P.start + hours)}. Reserva de retorno: ${fmtH(EVA_RETURN_TIME_RESERVE_HOURS)} (supuesto provisional del prototipo; no validado para Marte). *O₂ calculado con tasas provisionales; no equivale a autonomía ni se compara con capacidad del tanque, que no está definida.</div>`;
   $('profile').innerHTML = profileSvg(prof);
   // Barra superior
   const verdict = alerts.some(a => a[0] === 'bad') ? 'bad' : alerts.some(a => a[0] === 'warn') ? 'warn' : 'ok';
