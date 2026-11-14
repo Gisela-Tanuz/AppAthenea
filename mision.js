@@ -19,6 +19,13 @@ const MID_LAT = (BBOX.s + BBOX.n) / 2;
 const TERRAIN_TIMEOUT_MS = 30_000;
 // RAD (Hassler et al. 2014, Science): dosis equivalente medida por Curiosity en la superficie de Gale ≈ 0,64 mSv/día.
 const RAD = { mSvDay: 0.64, careerLimit: 600 };            // límite de carrera NASA-STD-3001 (2022): 600 mSv
+// Planning-only consumables: user-provided research; not validated Mars suit rates.
+const EVA_RESOURCE_ESTIMATES = {
+  metabolicO2KgPerHour: 0.09, // Mars PLSS schematic at 350 W average
+  leakageO2KgPerHour: 0.026,  // provisional suit-leakage analog
+  potableWaterLPerHour: 0.24, // minimum provision, not measured intake
+  coolingWaterKgPerHour: 0.45 // sublimator-class analog; architecture may differ on Mars
+};
 const STATION_DEFS = M.stations;
 const HAB_SOL = M.habSol;
 
@@ -50,6 +57,27 @@ const fmtH = h => { const m = Math.round(h * 60); return `${Math.floor(m / 60)} 
 const fmtClock = h => { h = ((h % 24) + 24) % 24; return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60) % 60).padStart(2, '0')}`; };
 const nearestWaypoint = sol => ROVER.waypoints.reduce((best, w) => Math.abs(w[0] - sol) < Math.abs(best[0] - sol) ? w : best);
 function setChip(id, text, state) { const el = $(id); el.querySelector('b').textContent = text; el.className = 'chip ' + (state || ''); }
+function renderConsumables(hours) {
+  const extraO2Rate = Number($('o2-architecture').value);
+  const metabolicO2 = hours * EVA_RESOURCE_ESTIMATES.metabolicO2KgPerHour;
+  const leakageO2 = hours * EVA_RESOURCE_ESTIMATES.leakageO2KgPerHour;
+  const ventilationO2 = hours * extraO2Rate;
+  const totalO2 = metabolicO2 + leakageO2 + ventilationO2;
+  const drinkingWater = hours * EVA_RESOURCE_ESTIMATES.potableWaterLPerHour;
+  const coolingWater = hours * EVA_RESOURCE_ESTIMATES.coolingWaterKgPerHour;
+  const foodEVA = hours * 200;
+  $('consumables').innerHTML = `<div class="muted">Estimación para 1 astronauta · ${fmtH(hours)} de EVA</div>
+    <table>
+      <tr><td>O₂ metabólico (350 W)</td><td class="r">${metabolicO2.toFixed(2)} kg</td></tr>
+      <tr><td>O₂ por fugas (provisional)</td><td class="r">${leakageO2.toFixed(2)} kg</td></tr>
+      <tr><td>O₂ extra por ventilación</td><td class="r">${ventilationO2.toFixed(2)} kg</td></tr>
+      <tr><th>O₂ total estimado</th><th class="r">${totalO2.toFixed(2)} kg</th></tr>
+      <tr><td>Agua potable a proveer</td><td class="r">${drinkingWater.toFixed(2)} L</td></tr>
+      <tr><td>Agua de enfriamiento (escenario)</td><td class="r">${coolingWater.toFixed(2)} kg</td></tr>
+      <tr><td>Alimento: presupuesto diario¹</td><td class="r">3.035 + ${foodEVA.toFixed(0)} = ${(3035 + foodEVA).toFixed(0)} kcal</td></tr>
+    </table>
+    <div class="muted">Estimaciones de planificación, no tasas validadas para un traje marciano. ¹Presupuesto por persona para el día de EVA; no implica consumo dentro del traje. Los 240 mL/h son provisión mínima, no ingesta medida. El agua de enfriamiento depende del sistema térmico; 0,45 kg/h es una analogía de sistemas con sublimador y puede no aplicar en Marte.</div>`;
+}
 
 // ---------- Mapa ----------
 const map = L.map('map', { crs: L.CRS.EPSG4326, center: [MID_LAT, (BBOX.w + BBOX.e) / 2], zoom: 14, minZoom: 6, maxZoom: 20, zoomSnap: 0.5 });
@@ -366,6 +394,7 @@ function legPath(a, b, P, B) {
 const routeLayer = L.layerGroup().addTo(map);
 let lastPlan = null, planTimer = null;
 function schedulePlan() { clearTimeout(planTimer); planTimer = setTimeout(plan, 250); }
+$('o2-architecture').addEventListener('change', () => { if (lastPlan) renderConsumables(lastPlan.hours); });
 function plan() {
   if (!T) return;
   const P = params(), B = blockedMask(), habLL = [hab.getLatLng().lat, hab.getLatLng().lng];
@@ -402,6 +431,7 @@ function plan() {
     rows.push(`<tr><td>${L_.from.label} → ${L_.to.label}</td><td class="r">${(legKm * 1000).toFixed(0)} m</td><td class="r">${fmtH(L_.hours)}</td><td class="r">${fmtClock(arrive)}</td><td class="r">${L_.to.min ? L_.to.min + ' min' : ''}</td></tr>`);
   });
   const reserve = P.eva - hours, dose = hours * RAD.mSvDay / 24;
+  renderConsumables(hours);
   // Verificaciones de seguridad
   if (reserve < 0) alerts.push(['bad', `La EVA dura ${fmtH(hours)} y supera la autonomía del traje (${P.eva} h). Quitá paradas o acortá tiempos.`]);
   else if (reserve < 1) alerts.push(['warn', `Reserva de solo ${fmtH(reserve)}. Se recomienda al menos 1 h para imprevistos.`]);
