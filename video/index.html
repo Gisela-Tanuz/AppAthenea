@@ -33,24 +33,15 @@
   .extras { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 14px; font-size: 13px; color: var(--muted); }
   .extras button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
   .extras button:disabled { opacity: .6; cursor: default; }
-  #seen { font-variant-numeric: tabular-nums; }
-  .tip, .end { position: absolute; background: rgba(18,13,11,.94); color: #f1e6e0; border: 1px solid #e5733f; border-radius: 10px; }
-  .tip { left: 16px; bottom: 64px; max-width: min(420px, calc(100% - 32px)); padding: 14px 16px; }
-  .tip h3 { margin: 0 0 4px; font-size: 16px; color: #ffb48a; }
-  .tip p { margin: 0 0 10px; font-size: 14px; }
-  .tip button, .end button, .end a { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 6px; border: 1px solid #e5733f; background: #e5733f; color: #fff; cursor: pointer; text-decoration: none; display: inline-block; }
+  .end { position: absolute; background: rgba(18,13,11,.94); color: #f1e6e0; border: 1px solid #e5733f; border-radius: 10px; }
+  .end button, .end a { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 6px; border: 1px solid #e5733f; background: #e5733f; color: #fff; cursor: pointer; text-decoration: none; display: inline-block; }
   .end { inset: 50% auto auto 50%; transform: translate(-50%, -60%); width: min(460px, calc(100% - 32px)); padding: 16px 18px; }
   .end h3 { margin: 0 0 8px; font-size: 17px; }
-  .end .opts { display: grid; gap: 6px; margin-bottom: 10px; }
-  .end .opts button { background: transparent; text-align: left; border-color: #5a463e; }
-  .end .opts button.right { border-color: #6cc28f; background: rgba(108,194,143,.18); }
-  .end .opts button.wrong { border-color: #e5733f; background: rgba(229,115,63,.18); }
-  .end .msg { min-height: 1.5em; font-size: 13px; margin-bottom: 10px; }
+  .end p { margin: 0 0 12px; font-size: 14px; color: #e8d6cc; }
   .end .row { display: flex; gap: 8px; flex-wrap: wrap; }
   .end .row a { background: transparent; }
   [hidden] { display: none !important; }
   @media (max-width: 640px) {
-    .tip { position: static; max-width: none; border-radius: 0; }
     .end { position: static; transform: none; width: auto; border-radius: 0; }
     .end h3 { font-size: 15px; }
   }
@@ -59,28 +50,18 @@
 <body>
 <main>
   <header>
-    <h1>La NASA tiene un problema y en SAN LUIS encontramos la solución, ATHENEA</h1>
-    <p>Guía de supervivencia interplanetaria · Mapa de Marte. Video interactivo de 30 segundos. Toca los puntos brillantes para ver consejos; el video se pausa mientras los lees.</p>
+    <h1>Athenea: decisiones mejor informadas para explorar Marte</h1>
+    <p>Un recorrido visual de 30 segundos: mapa, ruta, paradas científicas y recomendación de regreso.</p>
   </header>
 
   <div class="player" id="player">
     <canvas id="cv" width="1280" height="720" aria-label="Animación: un astronauta llega a Marte, planifica su ruta y hace una caminata"></canvas>
-    <div class="tip" id="tip" hidden role="dialog" aria-live="polite">
-      <h3 id="tipTitle"></h3>
-      <p id="tipText"></p>
-      <button id="tipGo">Seguir el video</button>
-    </div>
     <div class="end" id="end" hidden>
-      <h3>Pregunta final: ¿cuándo debes volver a la base?</h3>
-      <div class="opts" id="quiz">
-        <button data-ok="0">Cuando el oxígeno llegue al 10 %</button>
-        <button data-ok="1">Cuando hayas gastado un tercio del oxígeno</button>
-        <button data-ok="0">Cuando empiece a oscurecer</button>
-      </div>
-      <div class="msg" id="quizMsg"></div>
+      <h3>Planifica una EVA con Athenea</h3>
+      <p>Explora el mapa, organiza paradas y entiende por qué la ruta recomienda regresar.</p>
       <div class="row">
         <button id="again">Ver de nuevo</button>
-        <a href="../mision.html">Planificar una EVA en Athenea</a>
+        <a href="../mision.html">Abrir Athenea</a>
       </div>
     </div>
     <div class="controls">
@@ -95,7 +76,7 @@
   <nav class="chapters" id="chapters" aria-label="Capítulos"></nav>
 
   <div class="extras">
-    <span id="seen">Consejos descubiertos: 0 / 7</span>
+    <span>Demostración visual · datos disponibles y estimaciones</span>
     <button id="rec">Grabar como archivo de video</button>
     <span id="recMsg"></span>
   </div>
@@ -108,31 +89,20 @@ const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 // t: inicio en el video (s); k: velocidad de la animación interna de la escena
 const SCENES = [
   { t: 0,    k: 1,         name: 'Portada' },
-  { t: 6,    k: 8 / 3.5,   name: 'Llegada' },
-  { t: 9.5,  k: 8 / 3.5,   name: 'Primer paso' },
-  { t: 13,   k: 10 / 5.5,  name: 'Mapa de la ruta' },
-  { t: 18.5, k: 20 / 8.5,  name: 'Caminata' },
-  { t: 27,   k: 8 / 3,     name: 'Regreso' },
+  { t: 5,    k: 8 / 3,     name: 'Llegada' },
+  { t: 8,    k: 1,         name: 'Primer paso' },
+  { t: 10,   k: 10 / 10.5, name: 'Mapa y ruta' },
+  { t: 20.5, k: 1,         name: 'Plan de EVA' },
+  { t: 24.5, k: 8 / 3,     name: 'Regreso y cierre' },
 ];
 
 const SUBS = [
-  [6, 9.5, 'Cráter Jezero. Aquí pesas el 38 % de lo que pesas en la Tierra.'],
-  [9.5, 13, 'Primera huella. Revisa el traje antes de alejarte del módulo.'],
-  [13, 18.5, 'Planifica la ruta en el mapa. Toca cada parada.'],
-  [18.5, 23, 'Paso corto y constante. Toca los puntos brillantes.'],
-  [23, 27, 'Regla de los tercios: un tercio para ir, uno para volver, uno de reserva.'],
-  [27, 30, 'Caminata cumplida. Planifícala tú con ATHENEA.'],
+  [0, 5, 'En Marte, cada decisión cuenta.'],
+  [5, 10, 'Athenea reúne el contexto del terreno en un mapa.'],
+  [10, 20.5, 'Traza una ruta y organiza paradas para explorar.'],
+  [20.5, 24.5, 'Evalúa el regreso con el tiempo estimado y una reserva.'],
+  [24.5, 30, 'Athenea: más contexto para decidir antes de salir.'],
 ];
-
-const TIPS = {
-  roca:     ['Parada 1 · Roca firme', 'En la imagen infrarroja nocturna (THEMIS) la roca firme se ve clara porque guarda el calor del día. Ahí las botas no se hunden.'],
-  glaciar:  ['Parada 2 · Glaciar cubierto', 'Bajo el polvo puede haber hielo: agua para la base. El borde puede ceder, así que mantente a 20 m.'],
-  mirador:  ['Parada 3 · Mirador', 'Desde un punto alto ves el terreno y la radio llega mejor al módulo. Reporta tu posición.'],
-  pendiente:['Pendiente fuerte (18°)', 'Por encima de 15° el polvo resbala y el traje no deja doblar bien las rodillas. Rodea por la ladera suave.'],
-  arena:    ['Arena oscura', 'Arena oscura = suelo suelto. Las botas se hunden y cansa el doble. Rodéala aunque el camino sea más largo.'],
-  hielo:    ['Hielo expuesto', 'Toma la muestra con el taladro desde el borde firme. No pises la placa: debajo puede estar hueca.'],
-  oxigeno:  ['Oxígeno', 'Regla de los tercios: cuando gastes un tercio, empieza a volver. El último tercio es tu reserva para imprevistos.'],
-};
 
 // ---------- utilidades ----------
 const rnd = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
@@ -159,27 +129,6 @@ function stars(t, a, maxY = H) {
     ctx.fillStyle = `rgba(255,255,255,${a * (.45 + .45 * Math.sin(t * 2 + s.p))})`;
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
   }
-}
-
-// ---------- puntos interactivos ----------
-let hot = [];
-const seen = new Set();
-function hotspot(x, y, id, label, t) {
-  const done = seen.has(id), pulse = Math.sin(t * 5) * 4;
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = done ? 'rgba(108,194,143,.95)' : 'rgba(255,209,102,.95)';
-  ctx.fillStyle = done ? 'rgba(108,194,143,.25)' : 'rgba(255,209,102,.25)';
-  ctx.beginPath(); ctx.arc(x, y, 16 + pulse, 0, 7); ctx.fill(); ctx.stroke();
-  ctx.strokeStyle = done ? 'rgba(108,194,143,.35)' : 'rgba(255,209,102,.35)';
-  ctx.beginPath(); ctx.arc(x, y, 26 + pulse * 1.5, 0, 7); ctx.stroke();
-  text(done ? '✓' : '?', x, y + 1, 18, '#fff', { align: 'center', base: 'middle', weight: 700 });
-  if (label) {
-    ctx.font = '600 15px "Segoe UI", system-ui, sans-serif';
-    const w = ctx.measureText(label).width + 16;
-    ctx.fillStyle = 'rgba(18,13,11,.8)'; rr(x - w / 2, y - 62, w, 26, 6); ctx.fill();
-    text(label, x, y - 44, 15, '#fff', { align: 'center' });
-  }
-  hot.push({ x, y, r: 34, id });
 }
 
 // ---------- terreno ----------
@@ -317,19 +266,22 @@ function sTitle(lt, t) {
   sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.65)');
   ctx.fillStyle = sh; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
   ctx.restore();
-  const out = clamp((6 - lt) / .5);
+  const shade = ctx.createLinearGradient(0, 0, 900, 0);
+  shade.addColorStop(0, 'rgba(5,4,10,.86)'); shade.addColorStop(.72, 'rgba(5,4,10,.52)'); shade.addColorStop(1, 'rgba(5,4,10,0)');
+  ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
+  const out = clamp((5 - lt) / .6);
   ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 12;
-  ctx.globalAlpha = clamp((lt - .3) / .6) * out;
-  text('La NASA tiene un problema', 80, 230, 52, '#fff', { weight: 700 });
-  ctx.globalAlpha = clamp((lt - 1.3) / .6) * out;
-  text('y en SAN LUIS encontramos la solución,', 80, 300, 44, '#e8d6cc', { weight: 600 });
-  ctx.globalAlpha = clamp((lt - 2.3) / .5) * out;
-  const s = 1 + .15 * (1 - easeOut((lt - 2.3) / .6));
+  ctx.globalAlpha = clamp((lt - .1) / .4) * out;
+  text('MARTE', 80, 215, 26, '#ffb48a', { weight: 700 });
+  ctx.globalAlpha = clamp((lt - .6) / .45) * out;
+  text('Cada decisión cuenta.', 80, 280, 54, '#fff', { weight: 700 });
+  ctx.globalAlpha = clamp((lt - 1.4) / .45) * out;
+  const s = 1 + .12 * (1 - easeOut((lt - 1.4) / .5));
   ctx.save(); ctx.translate(80, 430); ctx.scale(s, s);
-  text('ATHENEA', 0, 0, 120, '#ff9a62', { weight: 800 });
+  text('ATHENEA', 0, 0, 126, '#ff9a62', { weight: 800 });
   ctx.restore();
-  ctx.globalAlpha = clamp((lt - 3.2) / .6) * out;
-  text('Guía de supervivencia interplanetaria · Mapa de Marte', 84, 480, 22, '#e8d6cc', { weight: 400 });
+  ctx.globalAlpha = clamp((lt - 2.4) / .45) * out;
+  text('Un mapa. Una ruta. Mejores decisiones.', 84, 480, 24, '#fff', { weight: 500 });
   ctx.shadowBlur = 0; ctx.globalAlpha = 1;
 }
 
@@ -403,7 +355,7 @@ function sMap(lt, t) {
   // título
   ctx.fillStyle = 'rgba(18,13,11,.75)'; rr(30, 30, 420, 84, 8); ctx.fill();
   text('PLAN DE CAMINATA', 48, 60, 14, '#ffb48a', { weight: 700 });
-  text('Cráter Jezero (mapa simulado)', 48, 96, 24, '#fff');
+  text('Jezero · ruta de demostración', 48, 96, 22, '#fff');
   // ruta
   const L = CUM[CUM.length - 1], p = ease((lt - .6) / 4.6) * L;
   ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 9; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -422,12 +374,18 @@ function sMap(lt, t) {
   ctx.fillStyle = '#f2efe9'; rr(ROUTE[0][0] - 14, ROUTE[0][1] - 14, 28, 28, 5); ctx.fill();
   text('Base', ROUTE[0][0], ROUTE[0][1] + 38, 16, '#fff', { align: 'center', weight: 700 });
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(end[0], end[1], 7, 0, 7); ctx.fill();
-  for (const s of STOPS) if (CUM[s.i] <= p) hotspot(ROUTE[s.i][0], ROUTE[s.i][1], s.id, s.name, t);
+  for (const s of STOPS) if (CUM[s.i] <= p) {
+    const [sx, sy] = ROUTE[s.i];
+    ctx.fillStyle = 'rgba(255,209,102,.22)'; ctx.beginPath(); ctx.arc(sx, sy, 24, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(sx, sy, 9, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(18,13,11,.84)'; rr(sx + 15, sy - 31, 150, 32, 7); ctx.fill();
+    text(s.name, sx + 25, sy - 10, 15, '#fff', { weight: 600 });
+  }
   if (lt > 5.5) {
     ctx.globalAlpha = clamp((lt - 5.5) / .5);
     ctx.fillStyle = 'rgba(18,13,11,.75)'; rr(W - 330, H - 120, 300, 90, 8); ctx.fill();
-    text('2,4 km · 3 paradas', W - 312, H - 82, 22, '#fff');
-    text('Desnivel 85 m · pendiente máx. 12°', W - 312, H - 50, 15, '#e8d6cc', { weight: 400 });
+    text('RUTA DE DEMOSTRACIÓN', W - 312, H - 82, 17, '#ffb48a', { weight: 700 });
+    text('3 paradas · trazado ilustrativo', W - 312, H - 50, 15, '#fff', { weight: 400 });
     ctx.globalAlpha = 1;
   }
 }
@@ -457,21 +415,19 @@ function sWalk(lt, t) {
   const wx = cam + 420;
   prints(460, wx - 20, cam);
   astronaut(420, terrainY(wx) - Math.abs(Math.sin(wx / 24)) * 9, 1.05, { walk: wx / 24 });
-  if (x0 + 120 > -40 && x0 < W + 40) hotspot(x0 + 120, 455, 'pendiente', 'Pendiente', t);
-  if (ax > -40 && ax < W + 40) hotspot(ax, 608, 'arena', 'Arena oscura', t);
-  if (ix > -40 && ix < W + 40) hotspot(ix, 608, 'hielo', 'Hielo', t);
-  // panel de datos
-  const o2 = 100 - 33 * clamp(lt / 20), km = 2.4 * clamp(lt / 20);
-  ctx.fillStyle = 'rgba(18,13,11,.75)'; rr(30, 30, 300, 128, 8); ctx.fill();
-  text('O₂', 48, 66, 18, '#ffb48a', { weight: 700 });
-  ctx.fillStyle = 'rgba(255,255,255,.15)'; rr(92, 52, 170, 16, 8); ctx.fill();
-  ctx.fillStyle = o2 > 70 ? '#6cc28f' : '#ffd166'; rr(92, 52, 170 * o2 / 100, 16, 8); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(92 + 170 * 2 / 3, 46); ctx.lineTo(92 + 170 * 2 / 3, 74); ctx.stroke();
-  text(`${Math.round(o2)} %`, 312, 66, 16, '#fff', { align: 'right' });
-  text(`Distancia  ${km.toFixed(1).replace('.', ',')} km`, 48, 106, 17, '#fff', { weight: 400 });
-  text('Temperatura  −58 °C', 48, 138, 17, '#fff', { weight: 400 });
-  hotspot(300, 130, 'oxigeno', '', t);
+  // Product-style panel replaces the unverified oxygen gauge and illustrative telemetry.
+  const panelIn = easeOut(lt / 1.2);
+  ctx.globalAlpha = panelIn;
+  ctx.fillStyle = 'rgba(18,13,11,.82)'; rr(30, 30, 370, 178, 10); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,154,98,.65)'; ctx.lineWidth = 1; rr(30, 30, 370, 178, 10); ctx.stroke();
+  text('PLAN DE EVA', 52, 65, 15, '#ffb48a', { weight: 700 });
+  const planRows = ['Ruta y paradas científicas', 'Contexto del terreno', 'Retorno con reserva temporal'];
+  planRows.forEach((label, i) => {
+    const y = 103 + i * 34;
+    ctx.fillStyle = i === 2 ? '#6cc28f' : '#ffd166'; ctx.beginPath(); ctx.arc(58, y - 5, 5, 0, 7); ctx.fill();
+    text(label, 75, y, 18, '#fff', { weight: 400 });
+  });
+  ctx.globalAlpha = 1;
 }
 
 function sReturn(lt, t) {
@@ -485,14 +441,25 @@ function sReturn(lt, t) {
   hills(0, k); ground(0, k);
   lander(900, terrainY(900), 0, t);
   const mv = clamp(lt / 4.5), x = lerp(250, 815, ease(mv));
+  ctx.save();
+  ctx.strokeStyle = 'rgba(108,194,143,.9)'; ctx.lineWidth = 5; ctx.setLineDash([14, 12]); ctx.lineDashOffset = -t * 28;
+  ctx.shadowColor = 'rgba(108,194,143,.75)'; ctx.shadowBlur = 14;
+  ctx.beginPath(); ctx.moveTo(x + 34, terrainY(x) - 34); ctx.quadraticCurveTo(850, 500, 900, terrainY(900) - 55); ctx.stroke();
+  ctx.restore();
   prints(200, x - 20, 0);
   astronaut(x, terrainY(x) - (mv < 1 ? Math.abs(Math.sin(x / 22)) * 8 : 0), 1.05, mv < 1 ? { walk: x / 22 } : {});
   if (lt > 4.6) {
     ctx.globalAlpha = clamp((lt - 4.6) / .6);
-    ctx.fillStyle = 'rgba(18,13,11,.8)'; rr(60, 60, 470, 236, 10); ctx.fill();
-    text('CAMINATA COMPLETADA', 84, 100, 15, '#ffb48a', { weight: 700 });
-    const lines = ['2,4 km recorridos', '3 paradas cumplidas', 'Oxígeno al volver: 67 %', `Consejos descubiertos: ${seen.size} de 7`];
-    lines.forEach((s, i) => { text('✓', 84, 146 + i * 36, 22, '#6cc28f', { weight: 700 }); text(s, 118, 146 + i * 36, 22, '#fff', { weight: 400 }); });
+    text('REGRESO PLANIFICADO', 60, 90, 16, '#ffb48a', { weight: 700 });
+    ctx.fillStyle = 'rgba(18,13,11,.86)'; rr(60, 110, 540, 210, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(108,194,143,.8)'; ctx.lineWidth = 2; rr(60, 110, 540, 210, 12); ctx.stroke();
+    text('¿Por qué volver?', 88, 157, 32, '#fff', { weight: 700 });
+    text('Tiempo estimado de regreso', 88, 205, 21, '#e8d6cc', { weight: 400 });
+    text('+ reserva temporal', 88, 242, 21, '#e8d6cc', { weight: 400 });
+    text('Una recomendación explicable, basada en la ruta.', 88, 286, 17, '#6cc28f', { weight: 600 });
+    ctx.globalAlpha = clamp((lt - 6.2) / .5);
+    text('ATHENEA', 850, 170, 62, '#ff9a62', { weight: 800 });
+    text('Planifica con los datos disponibles.', 852, 210, 20, '#fff', { weight: 400 });
     ctx.globalAlpha = 1;
   }
 }
@@ -502,7 +469,6 @@ const sceneAt = t => { let i = 0; while (i + 1 < SCENES.length && t >= SCENES[i 
 
 let cc = true;
 function render(t) {
-  hot = [];
   const i = sceneAt(t), lt = t - SCENES[i].t;
   ctx.save(); DRAW[i](lt * SCENES[i].k, t); ctx.restore();
   if (i > 0 && lt < .4) { ctx.fillStyle = `rgba(0,0,0,${1 - lt / .4})`; ctx.fillRect(0, 0, W, H); }
@@ -527,7 +493,7 @@ const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2,
 const chapterBtns = SCENES.map((s, i) => {
   const b = document.createElement('button');
   b.textContent = `${i + 1}. ${s.name}`;
-  b.onclick = () => { closeTip(); $('end').hidden = true; seek(s.t + .01); play(); };
+  b.onclick = () => { $('end').hidden = true; seek(s.t + .01); play(); };
   $('chapters').appendChild(b); return b;
 });
 
@@ -541,7 +507,7 @@ function ui() {
 function seek(v) { t = clamp(v, 0, DUR); render(t); ui(); }
 function play() { if (t >= DUR) seek(0); $('end').hidden = true; playing = true; last = performance.now(); ui(); }
 function pause() { playing = false; ui(); }
-function toggle() { playing ? pause() : (closeTip(), play()); }
+function toggle() { playing ? pause() : play(); }
 
 function loop(now) {
   if (playing) {
@@ -558,30 +524,10 @@ function finish() {
   $('end').hidden = false;
 }
 
-function openTip(id) {
-  pause();
-  const [title, body] = TIPS[id];
-  $('tipTitle').textContent = title; $('tipText').textContent = body;
-  $('tip').hidden = false; $('tipGo').focus();
-  seen.add(id); $('seen').textContent = `Consejos descubiertos: ${seen.size} / 7`;
-}
-function closeTip() { $('tip').hidden = true; }
-$('tipGo').onclick = () => { closeTip(); play(); };
-
-function canvasPoint(e) {
-  const r = cv.getBoundingClientRect();
-  return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height];
-}
-const hit = (x, y) => hot.find(h => Math.hypot(h.x - x, h.y - y) < h.r);
-cv.addEventListener('mousemove', e => { cv.style.cursor = !recorder && hit(...canvasPoint(e)) ? 'pointer' : 'default'; });
-cv.addEventListener('click', e => {
-  if (recorder) return;
-  const h = hit(...canvasPoint(e));
-  h ? openTip(h.id) : toggle();
-});
+cv.addEventListener('click', () => { if (!recorder) toggle(); });
 
 $('play').onclick = toggle;
-$('seek').oninput = e => { closeTip(); $('end').hidden = true; pause(); seek(e.target.value / 10); };
+$('seek').oninput = e => { $('end').hidden = true; pause(); seek(e.target.value / 10); };
 $('cc').onclick = () => { cc = !cc; $('cc').setAttribute('aria-pressed', cc); render(t); };
 $('fs').onclick = () => { document.fullscreenElement ? document.exitFullscreen() : $('player').requestFullscreen?.(); };
 $('again').onclick = () => { seek(0); play(); };
@@ -591,16 +537,6 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowRight') seek(t + 5);
   else if (e.key === 'ArrowLeft') seek(t - 5);
   else if (e.key.toLowerCase() === 'c') $('cc').click();
-});
-
-$('quiz').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  [...$('quiz').children].forEach(x => x.classList.remove('right', 'wrong'));
-  const ok = b.dataset.ok === '1';
-  b.classList.add(ok ? 'right' : 'wrong');
-  $('quizMsg').textContent = ok
-    ? '¡Correcto! Un tercio para ir, uno para volver y uno de reserva.'
-    : 'No. Si esperas tanto, no te queda margen para volver. Prueba otra.';
 });
 
 // grabar a archivo
@@ -621,7 +557,7 @@ $('rec').onclick = () => {
     $('recMsg').textContent = `Listo: se descargó ${a.download}.`;
     $('end').hidden = false;
   };
-  closeTip(); $('end').hidden = true; $('rec').disabled = true;
+  $('end').hidden = true; $('rec').disabled = true;
   $('recMsg').textContent = 'Grabando 30 segundos… deja esta pestaña visible.';
   seek(0); recorder.start(); play();
 };
