@@ -304,7 +304,7 @@ const stations = STATION_DEFS.map((d, k) => {
   // la parada del rover más cercana a ese sol que no se haya usado ya
   const w = ROVER.waypoints.filter(x => !usedWp.has(x[0])).reduce((b, x) => Math.abs(x[0] - d.sol) < Math.abs(b[0] - d.sol) ? x : b);
   usedWp.add(w[0]);
-  return Object.assign({}, d, { id: k, ll: [w[1], w[2]], src: `${M.rover.name} estuvo aquí (sol ${w[0]})` });
+  return Object.assign({}, d, { id: k, on: false, ll: [w[1], w[2]], src: `${M.rover.name} estuvo aquí (sol ${w[0]})` });
 });
 const stLayer = L.layerGroup().addTo(map);
 function renderStations() {
@@ -409,7 +409,7 @@ function blockedMask() {
       const i = r * T.nx + cc; if (havM(cellLL(i), o.ll) <= o.r + CELL_M * 0.7) B[i] = 1; } });
   return B;
 }
-function legPath(a, b, P, B) {
+function legPath(a, b, P, B, objective = 'time') {
   const s = cellOf(a), t = cellOf(b); if (s < 0 || t < 0) return null;
   const N = T.nx * T.ny, g = new Float64Array(N).fill(Infinity), came = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
   const vmaxH = speedKmh(-0.05, P), goal = cellLL(t), heap = new Heap();
@@ -424,21 +424,56 @@ function legPath(a, b, P, B) {
       const j = rr * T.nx + cc; if (closed[j] || B[j] || isNaN(T.E[j]) || !(T.S[j] <= P.maxSlope)) continue;
       if (Math.abs(dr) + Math.abs(dc) === 3) { const m = (r + Math.sign(dr) * (Math.abs(dr) > 1 ? 1 : 0)) * T.nx + (c + Math.sign(dc) * (Math.abs(dc) > 1 ? 1 : 0)); if (B[m] || !(T.S[m] <= P.maxSlope)) continue; }
       const d = CELL_M * Math.hypot(dr, dc), tan = (T.E[j] - T.E[i]) / d;
-      const ng = g[i] + (d / 1000) / speedKmh(tan, P);
+      const travelHours = (d / 1000) / speedKmh(tan, P);
+      const slopePenalty = objective === 'gentler' ? 0.5 * (d / 1000) * Math.pow(Math.min(T.S[j], P.maxSlope) / P.maxSlope, 2) : 0;
+      const ng = g[i] + travelHours + slopePenalty;
       if (ng < g[j]) { g[j] = ng; came[j] = i; heap.push(ng + h(j), j); }
     }
   }
   if (s !== t && came[t] === -1) return null;
   const cells = []; for (let i = t; i !== -1; i = came[i]) cells.push(i); cells.reverse();
-  return { cells, hours: g[t] };
+  let hours = 0;
+  for (let n = 1; n < cells.length; n++) {
+    const a = cells[n - 1], b = cells[n];
+    const d = CELL_M * Math.hypot((b / T.nx | 0) - (a / T.nx | 0), b % T.nx - a % T.nx);
+    hours += (d / 1000) / speedKmh((T.E[b] - T.E[a]) / d, P);
+  }
+  return { cells, hours };
 }
 
 const routeLayer = L.layerGroup().addTo(map);
+const alternativeRouteLayer = L.layerGroup();
 let lastPlan = null, planTimer = null;
 function schedulePlan() { clearTimeout(planTimer); planTimer = setTimeout(plan, 250); }
 $('o2-architecture').addEventListener('change', () => { if (lastPlan) schedulePlan(); });
+function drawTerrainUnavailablePlan() {
+  const habLL = [hab.getLatLng().lat, hab.getLatLng().lng];
+  const selected = stations.filter(s => s.on);
+  const points = [habLL, ...selected.map(s => s.ll), habLL];
+  let directKm = 0;
+  routeLayer.clearLayers(); alternativeRouteLayer.clearLayers(); map.removeLayer(alternativeRouteLayer);
+  for (let i = 1; i < points.length; i++) {
+    const segmentKm = havM(points[i - 1], points[i]) / 1000;
+    directKm += segmentKm;
+    L.polyline([points[i - 1], points[i]], { color: '#ffbd59', weight: 4, opacity: 0.95, dashArray: '7 8' })
+      .bindTooltip('Conexión directa de referencia; no es una ruta calculada sobre el terreno.').addTo(routeLayer);
+  }
+  $('verdict').className = 'warn'; $('verdict').textContent = selected.length ? 'REFERENCIA VISUAL' : 'SELECCIONA PARADAS';
+  setChip('c-time', 'Sin DEM', 'warn'); setChip('c-res', 'Sin DEM', 'warn');
+  setChip('c-dist', selected.length ? `${directKm.toFixed(2)} km*` : '—', 'warn');
+  setChip('c-far', 'Sin DEM', 'warn'); setChip('c-slope', 'Sin DEM', 'warn'); setChip('c-dose', 'Sin plan', 'warn');
+  $('alerts').innerHTML = `<div class="alert warn"><b>No hay datos de elevación para calcular la ruta a pie.</b> ${selected.length
+    ? 'La línea punteada amarilla solo conecta en línea directa las paradas seleccionadas y la base; no evita pendientes ni obstáculos y no sirve para estimar el tiempo de caminata.'
+    : 'Selecciona una o más paradas para ver sus conexiones directas de referencia.'}</div>`;
+  $('timeline').innerHTML = `<div class="muted">${selected.length
+    ? `Conexión directa de referencia: ${directKm.toFixed(2)} km*. La ruta transitable, el tiempo de regreso y la comparación de pendientes requieren el modelo de elevación.`
+    : 'No hay paradas seleccionadas. Selecciona una o más para mostrar la referencia visual.'}<br>*Distancia en línea directa; no es distancia de marcha.</div>`;
+  $('profile').innerHTML = '';
+  $('consumables').innerHTML = '<div class="muted">No se estima el consumo total porque no se calculó la duración de una ruta a pie.</div>';
+  lastPlan = null;
+}
 function plan() {
-  if (!T) return;
+  if (!T) { drawTerrainUnavailablePlan(); return; }
   const P = params(), B = blockedMask(), habLL = [hab.getLatLng().lat, hab.getLatLng().lng];
   routeLayer.clearLayers();
   const sel = stations.filter(s => s.on);
@@ -449,6 +484,11 @@ function plan() {
     const r = legPath(stops[k - 1].ll, stops[k].ll, P, B);
     if (!r) { alerts.push(['bad', `No hay camino a pie de ${stops[k - 1].label} a ${stops[k].label} con pendientes de hasta ${P.maxSlope}° y los obstáculos marcados. Probá subir la pendiente máxima o mover la parada.`]); legs.push(null); continue; }
     legs.push(Object.assign(r, { from: stops[k - 1], to: stops[k] }));
+  }
+  const gentleLegs = [];
+  for (let k = 1; k < stops.length; k++) {
+    const r = legPath(stops[k - 1].ll, stops[k].ll, P, B, 'gentler');
+    gentleLegs.push(r ? Object.assign(r, { from: stops[k - 1], to: stops[k] }) : null);
   }
   // Recorrido completo, perfil y métricas
   let km = 0, hours = 0, up = 0, down = 0, maxS = 0, far = 0;
@@ -506,6 +546,16 @@ function plan() {
       </div></section>`);
     if (margin <= 0) alerts.push(['bad', `RETORNO OBLIGATORIO en ${leg.to.label}: quedan ${fmtH(Math.max(0, remaining))}; la vuelta requiere ${fmtH(returnLeg.hours)} + ${fmtH(EVA_RETURN_TIME_RESERVE_HOURS)} de reserva = ${fmtH(returnLeg.hours + EVA_RETURN_TIME_RESERVE_HOURS)}. Margen: −${fmtH(Math.abs(margin))}.`]);
   });
+  let gentleKm = 0, gentleHours = 0, gentleMaxSlope = 0;
+  alternativeRouteLayer.clearLayers();
+  gentleLegs.forEach(leg => {
+    if (!leg) return;
+    const points = leg.cells.map(cellLL);
+    for (let n = 1; n < points.length; n++) gentleKm += havM(points[n - 1], points[n]) / 1000;
+    leg.cells.forEach(c => { gentleMaxSlope = Math.max(gentleMaxSlope, T.S[c] || 0); });
+    gentleHours += leg.hours + (leg.to.min || 0) / 60;
+    L.polyline(points, { color: '#6cc4ff', weight: 3, opacity: 0.9, dashArray: '3 7' }).addTo(alternativeRouteLayer);
+  });
   if (maxS > P.maxSlope * 0.85) alerts.push(['warn', `Hay tramos de ${maxS.toFixed(0)}°, cerca del límite de ${P.maxSlope}°. Ir con bastones y en fila.`]);
   if (!sun) alerts.push(['warn', 'No se pudo validar el horario de luz. Confirmá la salida y la puesta del sol antes de considerar apta esta EVA.']);
   else if (P.start + hours > sun.set - 0.5) alerts.push(['bad', `La EVA termina a las ${fmtClock(P.start + hours)} y la puesta de sol es a las ${fmtClock(sun.set)}. Salir antes.`]);
@@ -513,7 +563,17 @@ function plan() {
   else if (spaceWeather.level === 'warn') alerts.push(['warn', spaceWeather.msg]);
   if (!alerts.length) alerts.push(['ok', 'Sin alertas: la ruta respeta pendiente, autonomía, distancia de regreso, retorno por tiempo y horario de luz.']);
   $('alerts').innerHTML = alerts.map(a => `<div class="alert ${a[0]}">${a[1]}</div>`).join('');
+  const canCompareRoutes = sel.length && legs.every(Boolean) && gentleLegs.every(Boolean);
+  const routeComparison = canCompareRoutes
+    ? `<div style="min-width:0;margin-top:8px"><b>Comparación de rutas</b><div class="muted" style="margin:2px 0 6px">Misma secuencia de paradas</div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px">
+          <div style="min-width:0;padding:7px;border:1px solid var(--line);border-radius:7px"><b>Menor tiempo</b><div class="muted">Ruta coloreada por pendiente</div><div>${km.toFixed(2)} km</div><div>${fmtH(hours)} total</div><div>Pendiente máx. ${maxS.toFixed(1)}°</div></div>
+          <div style="min-width:0;padding:7px;border:1px solid #6cc4ff;border-radius:7px"><b>Más suave</b><div class="muted">Celeste punteada</div><div>${gentleKm.toFixed(2)} km</div><div>${fmtH(gentleHours)} total</div><div>Pendiente máx. ${gentleMaxSlope.toFixed(1)}°</div></div>
+        </div>
+        <div class="muted">La alternativa prioriza pendientes suaves y puede tardar más. Ambas usan el mismo modelo de elevación; no representan distinta calidad de datos ni certifican seguridad.</div></div>`
+    : `<div class="muted" style="margin-top:8px">${sel.length ? 'No se pudieron calcular ambas rutas completas para esta secuencia.' : 'Selecciona una o más paradas científicas para comparar perfiles de ruta.'}</div>`;
   $('timeline').innerHTML = `<table><tr><th>Tramo</th><th class="r">Dist.</th><th class="r">Camino</th><th class="r">Llegada</th><th class="r">Trabajo</th></tr>${rows.join('')}</table>
+    ${routeComparison}
     <div style="min-width:0;margin-top:8px"><b>Por qué volver</b><div class="muted" style="margin:2px 0 6px">Estimación al llegar a cada parada</div>${returnRows.join('')}</div>
     <div class="muted" style="margin-top:6px">Sube ${up.toFixed(0)} m · baja ${down.toFixed(0)} m · salida ${fmtClock(P.start)} · regreso ${fmtClock(P.start + hours)}. Reserva de retorno: ${fmtH(EVA_RETURN_TIME_RESERVE_HOURS)} (supuesto provisional del prototipo; no validado para Marte). *O₂ calculado con tasas provisionales; no equivale a autonomía ni se compara con capacidad del tanque, que no está definida.</div>`;
   $('profile').innerHTML = profileSvg(prof);
@@ -533,6 +593,8 @@ function plan() {
     <tr><td>Equivale a % del límite de carrera NASA (${RAD.careerLimit} mSv)</td><td class="r">${(100 * dose / RAD.careerLimit).toFixed(4)} %</td></tr></table>
     <div class="muted">El traje casi no frena los rayos cósmicos: la dosis depende sobre todo del tiempo fuera. El riesgo agudo son las tormentas solares (SEP): ante una alerta, volver a la base o refugiarse al pie de una pared alta, que tapa parte del cielo.${M.rover.key !== 'curiosity' ? `<br>* ${M.rover.name} no lleva detector de radiación: se usa la medición de Curiosity como referencia. En un sitio más alto hay menos atmósfera encima y la dosis real puede ser algo mayor.` : ''}</div>`;
   lastPlan = { stops, legs, km, hours, dose, alerts };
+  if (canCompareRoutes) alternativeRouteLayer.addTo(map);
+  else map.removeLayer(alternativeRouteLayer);
 }
 
 function profileSvg(p, w = 320, h = 90) {
@@ -633,8 +695,8 @@ loadDonki(); loadWeather();
   $('verdict').textContent = 'CARGANDO TERRENO…';
   try { T = await buildTerrain(); }
   catch (e) {
-    $('verdict').className = 'bad'; $('verdict').textContent = 'SIN TERRENO';
-    $('alerts').innerHTML = `<div class="alert bad">No se pudo descargar la elevación de Mars Trek (${e.message}). Sin terreno no se puede calcular una ruta segura.</div>`;
+    $('alerts-static').textContent = `No se pudieron cargar los datos de elevación de Mars Trek (${e.message}).`;
+    plan();
     return;
   }
   drawSlope(); drawElevation();
