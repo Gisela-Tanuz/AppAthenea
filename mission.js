@@ -1,24 +1,24 @@
-// ATHENEA · Planificador de EVA. Funciona para cualquier misión definida en misiones.js (elegida con ?m=gale, ?m=jezero…).
-// Datos NASA: HiRISE/CTX (óptico), DTM vía Mars Trek (topográfico), THEMIS (térmico), recorrido del rover (in situ),
-// RAD (radiación medida en superficie), DONKI (clima espacial en vivo), REMS/MEDA (meteorología de los rovers).
+// ATHENEA · EVA planner. Works for any mission defined in missions.js (chosen with ?m=gale, ?m=jezero…).
+// NASA data: HiRISE/CTX (optical), DTM via Mars Trek (topographic), THEMIS (thermal), rover traverse (in situ),
+// RAD (surface radiation measurement), DONKI (live space weather), REMS/MEDA (rover weather stations).
 
-// ---------- Misión elegida ----------
+// ---------- Selected mission ----------
 const MISSION_ID = (new URLSearchParams(location.search).get('m') || 'gale').toLowerCase();
 const M = MISSIONS[MISSION_ID] || MISSIONS.gale;
 const ROVER = ROVER_DATA[M.rover.key];
 
-// ---------- Constantes ----------
+// ---------- Constants ----------
 const MARS_R_KM = 3389.5;
-const DEG_M = Math.PI * MARS_R_KM * 1000 / 180;          // metros por grado de latitud (~59 160 m)
+const DEG_M = Math.PI * MARS_R_KM * 1000 / 180;          // meters per degree of latitude (~59,160 m)
 const BBOX = M.bbox;
 const TREK = 'https://trek.nasa.gov/tiles/Mars/EQ';
 const TREK_IMG = 'https://trek.nasa.gov/mars/trekarcgis/rest/services';
-const CELL_M = 10;                                         // celda de la grilla de navegación
+const CELL_M = 10;                                         // navigation grid cell
 const CELL_DEG = CELL_M / DEG_M;
 const MID_LAT = (BBOX.s + BBOX.n) / 2;
 const TERRAIN_TIMEOUT_MS = 30_000;
-// RAD (Hassler et al. 2014, Science): dosis equivalente medida por Curiosity en la superficie de Gale ≈ 0,64 mSv/día.
-const RAD = { mSvDay: 0.64, careerLimit: 600 };            // límite de carrera NASA-STD-3001 (2022): 600 mSv
+// RAD (Hassler et al. 2014, Science): dose equivalent measured by Curiosity on the surface at Gale ≈ 0.64 mSv/day.
+const RAD = { mSvDay: 0.64, careerLimit: 600 };            // NASA-STD-3001 (2022) career limit: 600 mSv
 // Planning-only consumables: user-provided research; not validated Mars suit rates.
 const EVA_RESOURCE_ESTIMATES = {
   metabolicO2KgPerHour: 0.09, // Mars PLSS schematic at 350 W average
@@ -29,23 +29,23 @@ const EVA_RESOURCE_ESTIMATES = {
 const STATION_DEFS = M.stations;
 const HAB_SOL = M.habSol;
 
-// Encabezado y textos según la misión
+// Header and texts for the selected mission
 document.title = 'Athenea · ' + M.name;
 document.getElementById('brand').innerHTML = `ATHENEA · ${M.name}<small>${M.place}</small>`;
-document.getElementById('intro').innerHTML = `${M.intro} Las paradas están en lugares que ${M.rover.name} visitó; los objetivos son propuestas a validar con el equipo científico.`;
+document.getElementById('intro').innerHTML = `${M.intro} The stops are at places ${M.rover.name} visited; the objectives are proposals to be validated with the science team.`;
 document.getElementById('lbl-hirise').textContent = M.hirise.label;
 document.getElementById('lbl-ctx').textContent = M.ctx.label;
-document.getElementById('lbl-dem').textContent = 'Pendiente calculada (' + M.dem.label + ')';
-document.getElementById('lbl-rover').textContent = 'Recorrido de ' + M.rover.name;
-document.getElementById('lbl-wp').textContent = `Paradas de ${M.rover.name} (inclinación medida)`;
-document.getElementById('wx-title').textContent = `Meteorología (${M.weather === 'msl' ? 'REMS, Curiosity' : 'MEDA, Perseverance'})`;
+document.getElementById('lbl-dem').textContent = 'Calculated slope (' + M.dem.label + ')';
+document.getElementById('lbl-rover').textContent = M.rover.name + ' traverse';
+document.getElementById('lbl-wp').textContent = `${M.rover.name} stops (measured tilt)`;
+document.getElementById('wx-title').textContent = `Weather (${M.weather === 'msl' ? 'REMS, Curiosity' : 'MEDA, Perseverance'})`;
 const sel = document.getElementById('mission-select');
 sel.innerHTML = Object.entries(MISSIONS).map(([k, v]) => `<option value="${k}" ${k === MISSION_ID ? 'selected' : ''}>${v.name}</option>`).join('');
 sel.onchange = () => { location.search = '?m=' + sel.value; };
 document.getElementById('p-walk').value = M.defaults.walk;
 document.getElementById('o-walk').textContent = M.defaults.walk + ' km';
 
-// ---------- Utilidades ----------
+// ---------- Utilities ----------
 const $ = id => document.getElementById(id);
 const toRad = Math.PI / 180;
 function havM(a, b) {
@@ -66,32 +66,32 @@ function renderConsumables(hours) {
   const drinkingWater = hours * EVA_RESOURCE_ESTIMATES.potableWaterLPerHour;
   const coolingWater = hours * EVA_RESOURCE_ESTIMATES.coolingWaterKgPerHour;
   const foodEVA = hours * 200;
-  $('consumables').innerHTML = `<div class="muted">Estimación para 1 astronauta · ${fmtH(hours)} de EVA</div>
+  $('consumables').innerHTML = `<div class="muted">Estimate for 1 astronaut · ${fmtH(hours)} of EVA</div>
     <table>
-      <tr><td>O₂ metabólico (350 W)</td><td class="r">${metabolicO2.toFixed(2)} kg</td></tr>
-      <tr><td>O₂ por fugas (provisional)</td><td class="r">${leakageO2.toFixed(2)} kg</td></tr>
-      <tr><td>O₂ extra por ventilación</td><td class="r">${ventilationO2.toFixed(2)} kg</td></tr>
-      <tr><th>O₂ total estimado</th><th class="r">${totalO2.toFixed(2)} kg</th></tr>
-      <tr><td>Agua potable a proveer</td><td class="r">${drinkingWater.toFixed(2)} L</td></tr>
-      <tr><td>Agua de enfriamiento (escenario)</td><td class="r">${coolingWater.toFixed(2)} kg</td></tr>
-      <tr><td>Alimento: presupuesto diario¹</td><td class="r">3.035 + ${foodEVA.toFixed(0)} = ${(3035 + foodEVA).toFixed(0)} kcal</td></tr>
+      <tr><td>Metabolic O₂ (350 W)</td><td class="r">${metabolicO2.toFixed(2)} kg</td></tr>
+      <tr><td>O₂ lost to leakage (provisional)</td><td class="r">${leakageO2.toFixed(2)} kg</td></tr>
+      <tr><td>Extra O₂ for ventilation</td><td class="r">${ventilationO2.toFixed(2)} kg</td></tr>
+      <tr><th>Total estimated O₂</th><th class="r">${totalO2.toFixed(2)} kg</th></tr>
+      <tr><td>Drinking water to provide</td><td class="r">${drinkingWater.toFixed(2)} L</td></tr>
+      <tr><td>Cooling water (scenario)</td><td class="r">${coolingWater.toFixed(2)} kg</td></tr>
+      <tr><td>Food: daily budget¹</td><td class="r">3,035 + ${foodEVA.toFixed(0)} = ${(3035 + foodEVA).toFixed(0)} kcal</td></tr>
     </table>
-    <div class="muted">Estimaciones de planificación, no tasas validadas para un traje marciano. ¹Presupuesto por persona para el día de EVA; no implica consumo dentro del traje. Los 240 mL/h son provisión mínima, no ingesta medida. El agua de enfriamiento depende del sistema térmico; 0,45 kg/h es una analogía de sistemas con sublimador y puede no aplicar en Marte.</div>`;
+    <div class="muted">Planning estimates, not validated rates for a Mars suit. ¹Per-person budget for the EVA day; it does not imply eating inside the suit. The 240 mL/h is a minimum provision, not measured intake. Cooling water depends on the thermal system; 0.45 kg/h is an analog of sublimator-based systems and may not apply on Mars.</div>`;
 }
 
-// ---------- Mapa ----------
+// ---------- Map ----------
 const map = L.map('map', { crs: L.CRS.EPSG4326, center: [MID_LAT, (BBOX.w + BBOX.e) / 2], zoom: 14, minZoom: 6, maxZoom: 20, zoomSnap: 0.5 });
 const trek = (id, maxN, o = {}) => L.tileLayer(`${TREK}/${id}/1.0.0/default/default028mm/{z}/{y}/{x}.${o.ext || 'png'}`,
   Object.assign({ maxNativeZoom: maxN, maxZoom: 20, noWrap: true, attribution: 'NASA/JPL-Caltech/UArizona/MSSS/ASU · Mars Trek' }, o));
 trek('Mars_MGS_MOLA_ClrShade_merge_global_463m', 7, { ext: 'jpg' }).addTo(map);
 const ctx = trek(M.ctx.id, M.ctx.maxN, { bounds: M.ctx.bounds }).addTo(map);
 const hirise = trek(M.hirise.id, M.hirise.maxN, { bounds: M.hirise.bounds }).addTo(map);
-// Vista de la elevación: teselas grises si la misión las tiene; si no, se dibuja desde la grilla calculada.
+// Elevation view: grayscale tiles if the mission has them; otherwise it is drawn from the computed grid.
 let demLayer = M.dem.grayTiles ? trek(M.dem.grayTiles.id, M.dem.grayTiles.maxN, { opacity: 0.55, bounds: M.hirise.bounds }) : L.layerGroup();
 const themis = trek('THEMIS_NightIR_ControlledMosaics_100m_v2_oct2018', 9, { opacity: 0.6 });
 map.fitBounds([[BBOX.s, BBOX.w], [BBOX.n, BBOX.e]]);
 L.rectangle([[BBOX.s, BBOX.w], [BBOX.n, BBOX.e]], { color: '#fff', weight: 1, dashArray: '6 6', fill: false, interactive: false }).addTo(map);
-L.control.scale({ imperial: false }).addTo(map); // nota: Leaflet usa radio terrestre; la escala es orientativa
+L.control.scale({ imperial: false }).addTo(map); // note: Leaflet uses Earth's radius; the scale is approximate
 
 $('l-hirise').onchange = () => hirise.addTo(map);
 $('l-ctx').onchange = () => map.removeLayer(hirise);
@@ -99,11 +99,11 @@ const bindToggle = (id, layer) => $(id).addEventListener('change', e => e.target
 $('l-dem').addEventListener('change', e => e.target.checked ? demLayer.addTo(map) : map.removeLayer(demLayer));
 bindToggle('l-themis', themis);
 
-// Unidad geológica cartografiada de Jezero; no representa una ubicación de muestra confirmada.
+// Mapped geologic unit at Jezero; it does not represent a confirmed sample location.
 const geologyLayer = L.geoJSON(null, {
   style: { color: '#d7b56d', weight: 1.5, opacity: 0.65, fillColor: '#c79b4b', fillOpacity: 0.4 },
   onEachFeature: (feature, layer) => layer.bindPopup(
-    '<b>NHjf₂ · abanico 2 de Jezero</b><br>Unidad geológica cartografiada; no representa una ubicación de muestra confirmada.<br><i>Fuente: NHjf2_CTX.gpkg</i>'
+    '<b>NHjf₂ · Jezero fan 2</b><br>Mapped geologic unit; it does not represent a confirmed sample location.<br><i>Source: NHjf2_CTX.gpkg</i>'
   )
 });
 let geologyFeatures = null;
@@ -127,12 +127,12 @@ function pointInMultiPolygon(point, features) {
 }
 function geologyContextForStation(station) {
   if (MISSION_ID !== 'jezero') return '';
-  if (geologyState === 'loading') return 'Cargando contexto geológico NHjf₂…';
-  if (geologyState !== 'ready') return 'Contexto geológico NHjf₂ no disponible.';
+  if (geologyState === 'loading') return 'Loading NHjf₂ geologic context…';
+  if (geologyState !== 'ready') return 'NHjf₂ geologic context unavailable.';
   const inside = pointInMultiPolygon([station.ll[1], station.ll[0]], geologyFeatures);
   return inside
-    ? 'Dentro de la unidad cartografiada NHjf₂; no confirma una ubicación de muestra.'
-    : 'Fuera/no asignada a NHjf₂; no se infiere otra unidad geológica.';
+    ? 'Inside the mapped NHjf₂ unit; this does not confirm a sample location.'
+    : 'Outside / not assigned to NHjf₂; no other geologic unit is inferred.';
 }
 const geologyToggle = $('l-geology');
 geologyToggle.closest('label').hidden = MISSION_ID !== 'jezero';
@@ -156,20 +156,20 @@ if (MISSION_ID === 'jezero') {
     });
 }
 
-// Rover: recorrido y paradas coloreadas por inclinación medida
+// Rover: traverse and stops colored by measured tilt
 const trav = L.polyline(ROVER.traverse, { color: '#ffffff', weight: 2, opacity: 0.8, dashArray: '4 4', interactive: false }).addTo(map);
 const wpLayer = L.layerGroup().addTo(map);
 ROVER.waypoints.filter(w => w[0] >= M.rover.sinceSol).forEach(w => {
   const col = w[4] > 15 ? '#ff5d5d' : w[4] > 8 ? '#ffd166' : '#3ddc97';
   L.circleMarker([w[1], w[2]], { radius: 4, color: '#000', weight: 1, fillColor: col, fillOpacity: 1 })
-    .bindTooltip(`${M.rover.name} · sol ${w[0]}<br>Elevación ${w[3].toFixed(0)} m<br>Inclinación medida del rover ${w[4].toFixed(1)}°`).addTo(wpLayer);
+    .bindTooltip(`${M.rover.name} · sol ${w[0]}<br>Elevation ${w[3].toFixed(0)} m<br>Measured rover tilt ${w[4].toFixed(1)}°`).addTo(wpLayer);
 });
 const last = ROVER.waypoints[ROVER.waypoints.length - 1];
 L.circleMarker([last[1], last[2]], { radius: 8, color: '#fff', weight: 2, fillColor: '#6cc4ff', fillOpacity: 1 })
-  .bindTooltip(`${M.rover.name}, última posición publicada (sol ${last[0]})`).addTo(wpLayer);
+  .bindTooltip(`${M.rover.name}, last published position (sol ${last[0]})`).addTo(wpLayer);
 bindToggle('l-trav', trav); bindToggle('l-wp', wpLayer);
 
-// ---------- Terreno: elevación real (Mars Trek ImageServer) → grilla de 10 m → pendiente ----------
+// ---------- Terrain: real elevation (Mars Trek ImageServer) → 10 m grid → slope ----------
 let T = null; // { nx, ny, E, S }
 function blur(a, nx, ny) {
   const o = new Float32Array(a.length);
@@ -181,8 +181,8 @@ function blur(a, nx, ny) {
   }
   return o;
 }
-// Pide al servidor de imágenes de Trek la elevación del área como números de 32 bits (metros), sin pasar por PNG.
-// Se pide al doble de resolución que la grilla y se promedian bloques de 2×2 para reducir el ruido.
+// Asks the Trek image server for the area's elevation as 32-bit numbers (meters), without going through PNG.
+// It is requested at twice the grid resolution and 2×2 blocks are averaged to reduce noise.
 async function fetchElevation(nx, ny) {
   const k = 2, w = nx * k, h = ny * k;
   const e = BBOX.w + nx * CELL_DEG, s = BBOX.n - ny * CELL_DEG;
@@ -197,20 +197,20 @@ async function fetchElevation(nx, ny) {
     buf = await r.arrayBuffer();
   } catch (e) {
     if (e.name === 'AbortError') {
-      throw new Error(`tiempo de espera agotado (${TERRAIN_TIMEOUT_MS / 1000} s)`);
+      throw new Error(`timed out (${TERRAIN_TIMEOUT_MS / 1000} s)`);
     }
     throw e;
   } finally {
     clearTimeout(timeout);
   }
-  if (buf.byteLength < w * h * 4) throw new Error(`respuesta incompleta (${buf.byteLength} bytes)`);
+  if (buf.byteLength < w * h * 4) throw new Error(`incomplete response (${buf.byteLength} bytes)`);
   const f = new Float32Array(buf.slice(0, w * h * 4));
   const raw = new Float32Array(nx * ny);
   for (let r0 = 0; r0 < ny; r0++) for (let c0 = 0; c0 < nx; c0++) {
     let sum = 0, n = 0;
     for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) {
       const v = f[(r0 * k + a) * w + c0 * k + b];
-      if (isFinite(v) && v > -12000 && v < 25000) { sum += v; n++; } // descarta "sin datos"
+      if (isFinite(v) && v > -12000 && v < 25000) { sum += v; n++; } // discards "no data"
     }
     raw[r0 * nx + c0] = n ? sum / n : NaN;
   }
@@ -229,10 +229,10 @@ async function buildTerrain() {
   const missing = raw.reduce((s, v) => s + (isNaN(v) ? 1 : 0), 0);
   return { nx, ny, E, S, bytes, missing };
 }
-// Vista de elevación dibujada desde la grilla (para misiones sin teselas grises de elevación)
+// Elevation view drawn from the grid (for missions without grayscale elevation tiles)
 function drawElevation() {
   if (M.dem.grayTiles) return;
-  let lo = Infinity, hi = -Infinity; // bucle: Math.min(...array) desborda la pila con >100 000 valores
+  let lo = Infinity, hi = -Infinity; // loop: Math.min(...array) overflows the stack with >100,000 values
   for (const v of T.E) if (!isNaN(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
   const cv = document.createElement('canvas'); cv.width = T.nx; cv.height = T.ny;
   const g = cv.getContext('2d'), img = g.createImageData(T.nx, T.ny);
@@ -246,7 +246,7 @@ const cellOf = ll => { const r = Math.floor((BBOX.n - ll[0]) / CELL_DEG), c = Ma
   return (r < 0 || c < 0 || r >= T.ny || c >= T.nx) ? -1 : r * T.nx + c; };
 const cellLL = i => [BBOX.n - (Math.floor(i / T.nx) + 0.5) * CELL_DEG, BBOX.w + (i % T.nx + 0.5) * CELL_DEG];
 
-const SLOPE_CLASSES = [[8, '#3ddc97', 'Menos de 8°: cómodo'], [15, '#ffd166', '8–15°: con cuidado'], [25, '#ff9b42', '15–25°: difícil con traje'], [90, '#ff5d5d', 'Más de 25°: evitar']];
+const SLOPE_CLASSES = [[8, '#3ddc97', 'Under 8°: comfortable'], [15, '#ffd166', '8–15°: with care'], [25, '#ff9b42', '15–25°: hard in a suit'], [90, '#ff5d5d', 'Over 25°: avoid']];
 const slopeColor = s => SLOPE_CLASSES.find(k => s < k[0])[1];
 $('slope-legend').innerHTML = SLOPE_CLASSES.map(k => `<div><span class="sw" style="background:${k[1]}"></span>${k[2]}</div>`).join('');
 let slopeOverlay = null;
@@ -263,37 +263,37 @@ function drawSlope() {
   $('l-slope').onchange = e => e.target.checked ? slopeOverlay.addTo(map) : map.removeLayer(slopeOverlay);
 }
 
-// ---------- Base, paradas y obstáculos ----------
+// ---------- Base, stops and obstacles ----------
 const habW = nearestWaypoint(HAB_SOL);
 let hab = L.marker([habW[1], habW[2]], { draggable: true, icon: L.divIcon({ className: 'hab-icon', iconSize: [22, 22] }) })
-  .bindTooltip('Base / hábitat', { permanent: true, direction: 'right', offset: [12, 0] }).addTo(map);
+  .bindTooltip('Base / habitat', { permanent: true, direction: 'right', offset: [12, 0] }).addTo(map);
 hab.on('dragend', () => { drawWalk(); schedulePlan(); });
 const walkCircle = L.circle(hab.getLatLng(), { radius: 1, color: '#6cc4ff', weight: 1.5, dashArray: '8 6', fill: false, interactive: false }).addTo(map);
-function drawWalk() { walkCircle.setLatLng(hab.getLatLng()); walkCircle.setRadius(+$('p-walk').value * 1000 * (6371 / MARS_R_KM)); } // Leaflet mide con radio terrestre
+function drawWalk() { walkCircle.setLatLng(hab.getLatLng()); walkCircle.setRadius(+$('p-walk').value * 1000 * (6371 / MARS_R_KM)); } // Leaflet measures with Earth's radius
 bindToggle('l-walk', walkCircle);
 
 const usedWp = new Set();
 const stations = STATION_DEFS.map((d, k) => {
-  // la parada del rover más cercana a ese sol que no se haya usado ya
+  // the rover stop closest to that sol that has not been used yet
   const w = ROVER.waypoints.filter(x => !usedWp.has(x[0])).reduce((b, x) => Math.abs(x[0] - d.sol) < Math.abs(b[0] - d.sol) ? x : b);
   usedWp.add(w[0]);
-  return Object.assign({}, d, { id: k, ll: [w[1], w[2]], src: `${M.rover.name} estuvo aquí (sol ${w[0]})` });
+  return Object.assign({}, d, { id: k, ll: [w[1], w[2]], src: `${M.rover.name} was here (sol ${w[0]})` });
 });
 const stLayer = L.layerGroup().addTo(map);
 function renderStations() {
   stLayer.clearLayers();
   const box = $('stations'); box.innerHTML = '';
   stations.forEach((s, k) => {
-    s.label = 'E' + (k + 1);
+    s.label = 'S' + (k + 1);
     const geologyContext = geologyContextForStation(s);
     const m = L.marker(s.ll, { draggable: true, opacity: s.on ? 1 : 0.45, icon: L.divIcon({ className: 'st-icon', html: s.label, iconSize: [26, 26] }) })
       .bindTooltip(`<b>${s.label} · ${s.name}</b><br>${s.obj}<br><i>${s.src}</i>${geologyContext ? `<br>${geologyContext}` : ''}`).addTo(stLayer);
-    m.on('dragend', () => { const p = m.getLatLng(); s.ll = [p.lat, p.lng]; s.src = 'Movida a mano'; renderStations(); schedulePlan(); });
+    m.on('dragend', () => { const p = m.getLatLng(); s.ll = [p.lat, p.lng]; s.src = 'Moved by hand'; renderStations(); schedulePlan(); });
     const el = document.createElement('div'); el.className = 'st';
-    el.innerHTML = `<input type="checkbox" id="st-${k}" ${s.on ? 'checked' : ''} aria-label="Incluir ${s.name}">
+    el.innerHTML = `<input type="checkbox" id="st-${k}" ${s.on ? 'checked' : ''} aria-label="Include ${s.name}">
       <div><span class="n">${s.label} · ${s.name}</span></div><span class="t">${s.min} min</span>
       <div class="o">${s.obj}<br><i>${s.src}</i>${geologyContext ? `<br>${geologyContext}` : ''}</div>`;
-    const go = document.createElement('button'); go.textContent = 'Ver'; go.onclick = () => map.setView(s.ll, 17);
+    const go = document.createElement('button'); go.textContent = 'View'; go.onclick = () => map.setView(s.ll, 17);
     el.querySelector('.t').after(go); el.style.gridTemplateColumns = '22px 1fr auto auto';
     el.querySelector('input').onchange = e => { s.on = e.target.checked; renderStations(); schedulePlan(); };
     box.appendChild(el);
@@ -303,23 +303,23 @@ function renderStations() {
 const obstacles = []; const obsLayer = L.layerGroup().addTo(map);
 function addObstacle(ll, r = 25) {
   obstacles.push({ ll, r });
-  L.circle(ll, { radius: r * (6371 / MARS_R_KM), color: '#ff5d5d', weight: 2, fillOpacity: 0.35 }).bindTooltip(`Obstáculo (${r} m de radio)`).addTo(obsLayer);
+  L.circle(ll, { radius: r * (6371 / MARS_R_KM), color: '#ff5d5d', weight: 2, fillOpacity: 0.35 }).bindTooltip(`Obstacle (${r} m radius)`).addTo(obsLayer);
 }
 $('clear-obs').onclick = () => { obstacles.length = 0; obsLayer.clearLayers(); schedulePlan(); };
 
 let mode = 'pan';
-const hints = { pan: 'Arrastrá el cuadrado verde para mover la base. Arrastrá los círculos naranjas para mover paradas.',
-  obs: 'Tocá el mapa para marcar una roca grande u otro obstáculo (25 m de radio). La ruta lo esquiva.',
-  stop: 'Tocá el mapa para agregar una parada científica.' };
+const hints = { pan: 'Drag the green square to move the base. Drag the orange circles to move stops.',
+  obs: 'Tap the map to mark a large rock or other obstacle (25 m radius). The route avoids it.',
+  stop: 'Tap the map to add a science stop.' };
 function setMode(m) { mode = m; ['pan', 'obs', 'stop'].forEach(k => $('m-' + k).setAttribute('aria-pressed', k === m)); $('mode-hint').textContent = hints[m]; $('map').classList.toggle('cross', m !== 'pan'); }
 ['pan', 'obs', 'stop'].forEach(k => $('m-' + k).onclick = () => setMode(k));
 map.on('click', e => {
   const ll = [e.latlng.lat, e.latlng.lng];
   if (mode === 'obs') { addObstacle(ll); schedulePlan(); }
-  if (mode === 'stop') { stations.push({ name: 'Parada agregada', obj: 'Objetivo a definir por la tripulación.', min: 20, on: true, ll, src: 'Agregada en el mapa' }); renderStations(); schedulePlan(); setMode('pan'); }
+  if (mode === 'stop') { stations.push({ name: 'Added stop', obj: 'Objective to be defined by the crew.', min: 20, on: true, ll, src: 'Added on the map' }); renderStations(); schedulePlan(); setMode('pan'); }
 });
 
-// ---------- Importar coordenadas escritas ----------
+// ---------- Import typed coordinates ----------
 const inZone = p => p.lat > BBOX.s && p.lat < BBOX.n && p.lon > BBOX.w && p.lon < BBOX.e;
 function importCoords(kind) {
   const msg = $('ci-msg');
@@ -327,27 +327,27 @@ function importCoords(kind) {
     const r = parseCoordText($('coord-in').value);
     const pts = r.points.concat(r.lines.flatMap(l => l.coords.map(c => ({ lat: c[0], lon: c[1], name: l.name }))));
     const ok = pts.filter(inZone), out = pts.filter(p => !inZone(p));
-    if (!ok.length) throw new Error(`Ninguna coordenada cae dentro de la zona de exploración (latitud ${BBOX.s} a ${BBOX.n}, longitud ${BBOX.w} a ${BBOX.e}). La primera fue ${pts[0].lat.toFixed(4)}, ${pts[0].lon.toFixed(4)}.`);
+    if (!ok.length) throw new Error(`No coordinate falls inside the exploration zone (latitude ${BBOX.s} to ${BBOX.n}, longitude ${BBOX.w} to ${BBOX.e}). The first one was ${pts[0].lat.toFixed(4)}, ${pts[0].lon.toFixed(4)}.`);
     if (kind === 'hab') { hab.setLatLng([ok[0].lat, ok[0].lon]); drawWalk(); }
     ok.forEach(p => {
-      if (kind === 'stop') stations.push({ name: p.name || 'Parada importada', obj: 'Objetivo a definir por la tripulación.', min: 20, on: true, ll: [p.lat, p.lon], src: `Importada: ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}` });
+      if (kind === 'stop') stations.push({ name: p.name || 'Imported stop', obj: 'Objective to be defined by the crew.', min: 20, on: true, ll: [p.lat, p.lon], src: `Imported: ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}` });
       if (kind === 'obs') addObstacle([p.lat, p.lon]);
     });
     if (kind === 'stop') renderStations();
     map.fitBounds(ok.map(p => [p.lat, p.lon]).concat([[hab.getLatLng().lat, hab.getLatLng().lng]]), { maxZoom: 17, padding: [40, 40] });
     schedulePlan();
-    const what = { stop: 'parada(s)', obs: 'obstáculo(s)', hab: 'base movida a la primera coordenada' }[kind];
+    const what = { stop: 'stop(s)', obs: 'obstacle(s)', hab: 'base moved to the first coordinate' }[kind];
     msg.style.color = 'var(--ok)';
-    msg.textContent = (kind === 'hab' ? 'Listo: ' + what : `Agregado: ${ok.length} ${what}`) + '.' +
-      (out.length ? ` ${out.length} coordenada(s) quedaron fuera de la zona y no se usaron.` : '') +
-      (r.errors.length ? ` Líneas con error: ${r.errors.join(' · ')}` : '');
-  } catch (e) { msg.style.color = 'var(--bad)'; msg.textContent = 'No se pudo importar. ' + e.message; }
+    msg.textContent = (kind === 'hab' ? 'Done: ' + what : `Added: ${ok.length} ${what}`) + '.' +
+      (out.length ? ` ${out.length} coordinate(s) fell outside the zone and were not used.` : '') +
+      (r.errors.length ? ` Lines with errors: ${r.errors.join(' · ')}` : '');
+  } catch (e) { msg.style.color = 'var(--bad)'; msg.textContent = 'Could not import. ' + e.message; }
 }
 $('ci-stop').onclick = () => importCoords('stop');
 $('ci-obs').onclick = () => importCoords('obs');
 $('ci-hab').onclick = () => importCoords('hab');
 
-// ---------- Planificación (A* con costo en tiempo de caminata) ----------
+// ---------- Planning (A* with walking-time cost) ----------
 class Heap { constructor() { this.k = []; this.v = []; }
   push(key, val) { const k = this.k, v = this.v; let i = k.length; k.push(key); v.push(val); while (i > 0) { const p = (i - 1) >> 1; if (k[p] <= key) break; k[i] = k[p]; v[i] = v[p]; i = p; } k[i] = key; v[i] = val; }
   pop() { const k = this.k, v = this.v, top = v[0], lk = k.pop(), lv = v.pop(), n = k.length;
@@ -357,7 +357,7 @@ class Heap { constructor() { this.k = []; this.v = []; }
 function params() {
   return { maxSlope: +$('p-slope').value, v0: +$('p-speed').value, load: +$('p-load').value, eva: +$('p-eva').value, walk: +$('p-walk').value, start: +$('p-start').value };
 }
-// Velocidad con traje: función de Tobler (caminata) normalizada a la velocidad en llano, reducida por la carga.
+// Suited walking speed: Tobler's hiking function normalized to flat-ground speed, reduced by the load.
 function speedKmh(tan, P) { const lf = Math.max(0.4, 1 - P.load / 120); return P.v0 * lf * Math.exp(-3.5 * Math.abs(tan + 0.05)) / Math.exp(-0.175); }
 
 function blockedMask() {
@@ -400,15 +400,15 @@ function plan() {
   const P = params(), B = blockedMask(), habLL = [hab.getLatLng().lat, hab.getLatLng().lng];
   routeLayer.clearLayers();
   const sel = stations.filter(s => s.on);
-  const stops = [{ label: 'Base', name: 'Base', ll: habLL, min: 0 }, ...sel, { label: 'Base', name: 'Regreso a base', ll: habLL, min: 0 }];
+  const stops = [{ label: 'Base', name: 'Base', ll: habLL, min: 0 }, ...sel, { label: 'Base', name: 'Return to base', ll: habLL, min: 0 }];
   const legs = [], alerts = [];
-  if (M.dem.coarse) alerts.push(['warn', 'Terreno de baja resolución (HRSC + MOLA, 200 m): esta ruta es preliminar; el relieve y los peligros locales no están validados. Revisar HiRISE y marcar obstáculos antes de usarla.']);
+  if (M.dem.coarse) alerts.push(['warn', 'Low-resolution terrain (HRSC + MOLA, 200 m): this route is preliminary; local relief and hazards are not validated. Review HiRISE and mark obstacles before using it.']);
   for (let k = 1; k < stops.length; k++) {
     const r = legPath(stops[k - 1].ll, stops[k].ll, P, B);
-    if (!r) { alerts.push(['bad', `No hay camino a pie de ${stops[k - 1].label} a ${stops[k].label} con pendientes de hasta ${P.maxSlope}° y los obstáculos marcados. Probá subir la pendiente máxima o mover la parada.`]); legs.push(null); continue; }
+    if (!r) { alerts.push(['bad', `No walking path from ${stops[k - 1].label} to ${stops[k].label} with slopes up to ${P.maxSlope}° and the marked obstacles. Try raising the max slope or moving the stop.`]); legs.push(null); continue; }
     legs.push(Object.assign(r, { from: stops[k - 1], to: stops[k] }));
   }
-  // Recorrido completo, perfil y métricas
+  // Full traverse, profile and metrics
   let km = 0, hours = 0, up = 0, down = 0, maxS = 0, far = 0;
   const prof = [], rows = [];
   let clock = P.start;
@@ -421,7 +421,7 @@ function plan() {
       maxS = Math.max(maxS, T.S[c] || 0); far = Math.max(far, havM(ll, habLL) / 1000);
       prof.push([km + legKm, T.E[c]]);
     });
-    // Dibujo por tramos coloreados según pendiente
+    // Draw segments colored by slope
     let seg = [cellLL(L_.cells[0])], col = slopeColor(T.S[L_.cells[0]] || 0);
     L_.cells.slice(1).forEach(c => { const cc = slopeColor(T.S[c] || 0), ll = cellLL(c); seg.push(ll);
       if (cc !== col) { L.polyline(seg, { color: col, weight: 5, opacity: 0.95 }).addTo(routeLayer); seg = [ll]; col = cc; } });
@@ -432,23 +432,23 @@ function plan() {
   });
   const reserve = P.eva - hours, dose = hours * RAD.mSvDay / 24;
   renderConsumables(hours);
-  // Verificaciones de seguridad
-  if (reserve < 0) alerts.push(['bad', `La EVA dura ${fmtH(hours)} y supera la autonomía del traje (${P.eva} h). Quitá paradas o acortá tiempos.`]);
-  else if (reserve < 1) alerts.push(['warn', `Reserva de solo ${fmtH(reserve)}. Se recomienda al menos 1 h para imprevistos.`]);
-  if (far > P.walk) alerts.push(['bad', `La ruta se aleja ${far.toFixed(2)} km de la base y supera el límite de regreso a pie (${P.walk} km).`]);
-  if (maxS > P.maxSlope * 0.85) alerts.push(['warn', `Hay tramos de ${maxS.toFixed(0)}°, cerca del límite de ${P.maxSlope}°. Ir con bastones y en fila.`]);
-  if (sun && P.start + hours > sun.set - 0.5) alerts.push(['bad', `La EVA termina a las ${fmtClock(P.start + hours)} y la puesta de sol es a las ${fmtClock(sun.set)}. Salir antes.`]);
+  // Safety checks
+  if (reserve < 0) alerts.push(['bad', `The EVA lasts ${fmtH(hours)} and exceeds the suit endurance (${P.eva} h). Remove stops or shorten their time.`]);
+  else if (reserve < 1) alerts.push(['warn', `Only ${fmtH(reserve)} of reserve. At least 1 h is recommended for contingencies.`]);
+  if (far > P.walk) alerts.push(['bad', `The route goes ${far.toFixed(2)} km from the base and exceeds the walk-back limit (${P.walk} km).`]);
+  if (maxS > P.maxSlope * 0.85) alerts.push(['warn', `There are ${maxS.toFixed(0)}° segments, close to the ${P.maxSlope}° limit. Use poles and walk in single file.`]);
+  if (sun && P.start + hours > sun.set - 0.5) alerts.push(['bad', `The EVA ends at ${fmtClock(P.start + hours)} and sunset is at ${fmtClock(sun.set)}. Leave earlier.`]);
   if (spaceWeather.level === 'bad') alerts.push(['bad', spaceWeather.msg]);
   else if (spaceWeather.level === 'warn') alerts.push(['warn', spaceWeather.msg]);
-  if (!alerts.length) alerts.push(['ok', 'Sin alertas: la ruta respeta pendiente, autonomía, distancia de regreso y horario de luz.']);
+  if (!alerts.length) alerts.push(['ok', 'No alerts: the route respects slope, endurance, walk-back distance and daylight.']);
   $('alerts').innerHTML = alerts.map(a => `<div class="alert ${a[0]}">${a[1]}</div>`).join('');
-  $('timeline').innerHTML = `<table><tr><th>Tramo</th><th class="r">Dist.</th><th class="r">Camino</th><th class="r">Llegada</th><th class="r">Trabajo</th></tr>${rows.join('')}</table>
-    <div class="muted" style="margin-top:6px">Sube ${up.toFixed(0)} m · baja ${down.toFixed(0)} m · salida ${fmtClock(P.start)} · regreso ${fmtClock(P.start + hours)}</div>`;
+  $('timeline').innerHTML = `<table><tr><th>Leg</th><th class="r">Dist.</th><th class="r">Walk</th><th class="r">Arrival</th><th class="r">Work</th></tr>${rows.join('')}</table>
+    <div class="muted" style="margin-top:6px">Up ${up.toFixed(0)} m · down ${down.toFixed(0)} m · departure ${fmtClock(P.start)} · return ${fmtClock(P.start + hours)}</div>`;
   $('profile').innerHTML = profileSvg(prof);
-  // Barra superior
+  // Top bar
   const verdict = alerts.some(a => a[0] === 'bad') ? 'bad' : alerts.some(a => a[0] === 'warn') ? 'warn' : 'ok';
   $('verdict').className = verdict;
-  $('verdict').textContent = verdict === 'bad' ? 'EVA NO APTA' : M.dem.coarse ? 'RUTA PRELIMINAR' : verdict === 'warn' ? 'EVA CON PRECAUCIÓN' : 'EVA APTA';
+  $('verdict').textContent = verdict === 'bad' ? 'EVA NOT CLEARED' : M.dem.coarse ? 'PRELIMINARY ROUTE' : verdict === 'warn' ? 'EVA WITH CAUTION' : 'EVA CLEARED';
   setChip('c-time', fmtH(hours), hours > P.eva ? 'bad' : '');
   setChip('c-res', reserve >= 0 ? fmtH(reserve) : '−' + fmtH(-reserve), reserve < 0 ? 'bad' : reserve < 1 ? 'warn' : 'ok');
   setChip('c-dist', km.toFixed(2) + ' km');
@@ -456,10 +456,10 @@ function plan() {
   setChip('c-slope', maxS.toFixed(0) + '°', maxS > P.maxSlope * 0.85 ? 'warn' : 'ok');
   setChip('c-dose', dose.toFixed(3) + ' mSv', spaceWeather.level === 'bad' ? 'bad' : '');
   $('rad').innerHTML = `<table>
-    <tr><td>Tasa en superficie (RAD, Curiosity, Gale)${M.rover.key !== 'curiosity' ? ' *' : ''}</td><td class="r">${RAD.mSvDay} mSv/día</td></tr>
-    <tr><td>Dosis de esta EVA (${fmtH(hours)})</td><td class="r">${dose.toFixed(3)} mSv</td></tr>
-    <tr><td>Equivale a % del límite de carrera NASA (${RAD.careerLimit} mSv)</td><td class="r">${(100 * dose / RAD.careerLimit).toFixed(4)} %</td></tr></table>
-    <div class="muted">El traje casi no frena los rayos cósmicos: la dosis depende sobre todo del tiempo fuera. El riesgo agudo son las tormentas solares (SEP): ante una alerta, volver a la base o refugiarse al pie de una pared alta, que tapa parte del cielo.${M.rover.key !== 'curiosity' ? `<br>* ${M.rover.name} no lleva detector de radiación: se usa la medición de Curiosity como referencia. En un sitio más alto hay menos atmósfera encima y la dosis real puede ser algo mayor.` : ''}</div>`;
+    <tr><td>Surface rate (RAD, Curiosity, Gale)${M.rover.key !== 'curiosity' ? ' *' : ''}</td><td class="r">${RAD.mSvDay} mSv/day</td></tr>
+    <tr><td>Dose for this EVA (${fmtH(hours)})</td><td class="r">${dose.toFixed(3)} mSv</td></tr>
+    <tr><td>Share of NASA career limit (${RAD.careerLimit} mSv)</td><td class="r">${(100 * dose / RAD.careerLimit).toFixed(4)} %</td></tr></table>
+    <div class="muted">The suit barely stops cosmic rays: the dose depends mostly on time outside. The acute risk is solar storms (SEP): after an alert, return to the base or shelter at the foot of a tall wall, which blocks part of the sky.${M.rover.key !== 'curiosity' ? `<br>* ${M.rover.name} carries no radiation detector: Curiosity's measurement is used as a reference. A higher site has less atmosphere overhead, so the real dose may be somewhat higher.` : ''}</div>`;
   lastPlan = { stops, legs, km, hours, dose, alerts };
 }
 
@@ -468,27 +468,27 @@ function profileSvg(p, w = 320, h = 90) {
   const x1 = p[p.length - 1][0] || 1, ys = p.map(q => q[1]), y0 = Math.min(...ys), y1 = Math.max(...ys), dy = (y1 - y0) || 1;
   const X = x => (x / x1) * w, Y = y => 8 + (1 - (y - y0) / dy) * (h - 16);
   const pts = p.map(q => `${X(q[0]).toFixed(1)},${Y(q[1]).toFixed(1)}`).join(' ');
-  return `<svg viewBox="0 0 ${w} ${h + 14}" width="100%" role="img" aria-label="Perfil de elevación de la EVA">
+  return `<svg viewBox="0 0 ${w} ${h + 14}" width="100%" role="img" aria-label="EVA elevation profile">
     <polygon points="0,${h - 8} ${pts} ${w},${h - 8}" fill="#f08a4b" fill-opacity=".18"/><polyline points="${pts}" fill="none" stroke="#f08a4b" stroke-width="1.6"/>
     <text x="0" y="10" font-size="10" fill="#a8968c">${y1.toFixed(0)} m</text><text x="0" y="${h + 10}" font-size="10" fill="#a8968c">${y0.toFixed(0)} m</text>
-    <text x="${w}" y="${h + 10}" font-size="10" fill="#a8968c" text-anchor="end">${x1.toFixed(2)} km · perfil de elevación</text></svg>`;
+    <text x="${w}" y="${h + 10}" font-size="10" fill="#a8968c" text-anchor="end">${x1.toFixed(2)} km · elevation profile</text></svg>`;
 }
 
-// ---------- Parámetros ----------
+// ---------- Parameters ----------
 const outs = { 'p-slope': v => v + '°', 'p-speed': v => v + ' km/h', 'p-load': v => v + ' kg', 'p-eva': v => v + ' h', 'p-walk': v => v + ' km', 'p-start': v => fmtClock(+v) };
 Object.keys(outs).forEach(id => $(id).addEventListener('input', e => { $('o-' + id.slice(2)).textContent = outs[id](e.target.value); if (id === 'p-walk') drawWalk(); schedulePlan(); }));
 $('plan').onclick = plan;
 $('copy').onclick = async () => {
   if (!lastPlan) return;
-  const fc = { type: 'FeatureCollection', properties: { mision: 'Athenea · ' + M.name, duracion_h: +lastPlan.hours.toFixed(2), distancia_km: +lastPlan.km.toFixed(3), dosis_mSv: +lastPlan.dose.toFixed(4) }, features: [] };
-  lastPlan.stops.forEach(s => fc.features.push({ type: 'Feature', properties: { nombre: s.name, objetivo: s.obj || '', minutos: s.min }, geometry: { type: 'Point', coordinates: [s.ll[1], s.ll[0]] } }));
-  lastPlan.legs.filter(Boolean).forEach(l => fc.features.push({ type: 'Feature', properties: { tramo: `${l.from.label} → ${l.to.label}`, horas: +l.hours.toFixed(3) }, geometry: { type: 'LineString', coordinates: l.cells.map(c => { const ll = cellLL(c); return [+ll[1].toFixed(6), +ll[0].toFixed(6)]; }) } }));
+  const fc = { type: 'FeatureCollection', properties: { mission: 'Athenea · ' + M.name, duration_h: +lastPlan.hours.toFixed(2), distance_km: +lastPlan.km.toFixed(3), dose_mSv: +lastPlan.dose.toFixed(4) }, features: [] };
+  lastPlan.stops.forEach(s => fc.features.push({ type: 'Feature', properties: { name: s.name, objective: s.obj || '', minutes: s.min }, geometry: { type: 'Point', coordinates: [s.ll[1], s.ll[0]] } }));
+  lastPlan.legs.filter(Boolean).forEach(l => fc.features.push({ type: 'Feature', properties: { leg: `${l.from.label} → ${l.to.label}`, hours: +l.hours.toFixed(3) }, geometry: { type: 'LineString', coordinates: l.cells.map(c => { const ll = cellLL(c); return [+ll[1].toFixed(6), +ll[0].toFixed(6)]; }) } }));
   const txt = JSON.stringify(fc);
-  try { await navigator.clipboard.writeText(txt); $('copy').textContent = 'Plan copiado'; } catch { $('copy').textContent = 'No se pudo copiar'; }
-  setTimeout(() => $('copy').textContent = 'Copiar plan (GeoJSON)', 2000);
+  try { await navigator.clipboard.writeText(txt); $('copy').textContent = 'Plan copied'; } catch { $('copy').textContent = 'Could not copy'; }
+  setTimeout(() => $('copy').textContent = 'Copy plan (GeoJSON)', 2000);
 };
 
-// ---------- Clima espacial (DONKI, NASA) ----------
+// ---------- Space weather (DONKI, NASA) ----------
 const spaceWeather = { level: 'unknown', msg: '' };
 async function loadDonki() {
   const end = new Date(), start = new Date(end - 30 * 864e5), f = d => d.toISOString().slice(0, 10);
@@ -496,28 +496,28 @@ async function loadDonki() {
     const r = await fetch(`https://api.nasa.gov/DONKI/notifications?startDate=${f(start)}&endDate=${f(end)}&type=all&api_key=DEMO_KEY`);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const list = await r.json();
-    const names = { FLR: 'Fulguración solar', SEP: 'Partículas solares (SEP)', CME: 'Eyección de masa coronal', IPS: 'Choque interplanetario', GST: 'Tormenta geomagnética', RBE: 'Cinturones de radiación (Tierra)', MPC: 'Cruce de magnetopausa', Report: 'Informe semanal' };
+    const names = { FLR: 'Solar flare', SEP: 'Solar energetic particles (SEP)', CME: 'Coronal mass ejection', IPS: 'Interplanetary shock', GST: 'Geomagnetic storm', RBE: 'Radiation belt enhancement (Earth)', MPC: 'Magnetopause crossing', Report: 'Weekly report' };
     const recentDays = d => (Date.now() - new Date(d)) / 864e5;
     const mars = list.filter(n => /\bMars\b/i.test(n.messageBody));
     const sepRecent = list.filter(n => n.messageType === 'SEP' && recentDays(n.messageIssueTime) < 3);
     const marsRecent = mars.filter(n => recentDays(n.messageIssueTime) < 5 && n.messageType !== 'Report');
-    if (sepRecent.length) Object.assign(spaceWeather, { level: 'bad', msg: 'Alerta de partículas solares (SEP) en los últimos 3 días. Suspender EVA hasta confirmar niveles con RAD.' });
-    else if (marsRecent.length) Object.assign(spaceWeather, { level: 'warn', msg: `DONKI menciona a Marte en ${marsRecent.length} aviso(s) de los últimos 5 días (posible eyección hacia Marte). Planificar EVA corta y cerca de la base.` });
-    else Object.assign(spaceWeather, { level: 'ok', msg: 'Sin eventos solares recientes dirigidos a Marte.' });
-    setChip('c-sw', { ok: 'Tranquilo', warn: 'Atención', bad: 'Alerta' }[spaceWeather.level], spaceWeather.level);
+    if (sepRecent.length) Object.assign(spaceWeather, { level: 'bad', msg: 'Solar energetic particle (SEP) alert in the last 3 days. Suspend the EVA until levels are confirmed with RAD.' });
+    else if (marsRecent.length) Object.assign(spaceWeather, { level: 'warn', msg: `DONKI mentions Mars in ${marsRecent.length} notification(s) from the last 5 days (possible ejection toward Mars). Plan a short EVA close to the base.` });
+    else Object.assign(spaceWeather, { level: 'ok', msg: 'No recent solar events directed at Mars.' });
+    setChip('c-sw', { ok: 'Quiet', warn: 'Watch', bad: 'Alert' }[spaceWeather.level], spaceWeather.level);
     const counts = {}; list.forEach(n => counts[n.messageType] = (counts[n.messageType] || 0) + 1);
     $('donki').innerHTML = `<div class="alert ${spaceWeather.level}">${spaceWeather.msg}</div>
-      <div style="margin-top:6px">Avisos DONKI de los últimos 30 días: ${Object.entries(counts).map(([k, v]) => `${names[k] || k}: <b>${v}</b>`).join(' · ')}</div>
-      <div style="margin-top:6px">${list.filter(n => n.messageType !== 'Report').slice(-5).reverse().map(n => `<div class="ev"><b>${n.messageIssueTime.slice(0, 16).replace('T', ' ')}</b> · ${names[n.messageType] || n.messageType}${/\bMars\b/i.test(n.messageBody) ? ' · <b style="color:var(--warn)">menciona Marte</b>' : ''} · <a href="${n.messageURL}" target="_blank" style="color:var(--info)">ver</a></div>`).join('')}</div>
-      <div class="muted" style="margin-top:6px">DONKI se centra en la Tierra; para Marte solo sirve como aviso temprano. Una misión real usaría el monitoreo de RAD en tiempo real.</div>`;
+      <div style="margin-top:6px">DONKI notifications in the last 30 days: ${Object.entries(counts).map(([k, v]) => `${names[k] || k}: <b>${v}</b>`).join(' · ')}</div>
+      <div style="margin-top:6px">${list.filter(n => n.messageType !== 'Report').slice(-5).reverse().map(n => `<div class="ev"><b>${n.messageIssueTime.slice(0, 16).replace('T', ' ')}</b> · ${names[n.messageType] || n.messageType}${/\bMars\b/i.test(n.messageBody) ? ' · <b style="color:var(--warn)">mentions Mars</b>' : ''} · <a href="${n.messageURL}" target="_blank" style="color:var(--info)">view</a></div>`).join('')}</div>
+      <div class="muted" style="margin-top:6px">DONKI is Earth-centered; for Mars it only serves as an early warning. A real mission would use real-time RAD monitoring.</div>`;
   } catch (e) {
-    Object.assign(spaceWeather, { level: 'warn', msg: 'No se pudo consultar DONKI. Sin datos de clima espacial: confirmar con control de misión antes de salir.' });
-    setChip('c-sw', 'Sin datos', 'warn'); $('donki').innerHTML = `<div class="alert warn">${spaceWeather.msg} (${e.message})</div>`;
+    Object.assign(spaceWeather, { level: 'warn', msg: 'Could not query DONKI. No space weather data: confirm with mission control before going out.' });
+    setChip('c-sw', 'No data', 'warn'); $('donki').innerHTML = `<div class="alert warn">${spaceWeather.msg} (${e.message})</div>`;
   }
   schedulePlan();
 }
 
-// ---------- Meteorología (REMS de Curiosity o MEDA de Perseverance) ----------
+// ---------- Weather (Curiosity's REMS or Perseverance's MEDA) ----------
 let sun = null;
 const WEATHER = {
   msl: { url: 'https://mars.nasa.gov/rss/api/?feed=weather&category=msl&feedtype=json', src: 'REMS (Centro de Astrobiología / NASA-JPL)',
@@ -529,38 +529,38 @@ async function loadWeather() {
   const W = WEATHER[M.weather];
   try {
     const r = await fetch(W.url);
-    const s = W.pick(await r.json()); if (!s) throw new Error('el feed no trae datos');
+    const s = W.pick(await r.json()); if (!s) throw new Error('the feed has no data');
     const hm = t => { const [a, b] = t.split(':').map(Number); return a + b / 60; }, hhmm = t => t.slice(0, 5);
     const num = v => typeof v === 'number' ? v.toFixed(0) : v;
     sun = { rise: hm(s.sunrise), set: hm(s.sunset) };
     setChip('c-sun', `${hhmm(s.sunrise)}–${hhmm(s.sunset)}`, 'ok');
-    const uv = s.local_uv_irradiance_index ? `<tr><td>Radiación UV</td><td class="r">${({ Low: 'Baja', Moderate: 'Moderada', High: 'Alta', 'Very_High': 'Muy alta', 'Very High': 'Muy alta' })[s.local_uv_irradiance_index] || s.local_uv_irradiance_index}</td></tr>` : '';
-    const ground = s.min_gts_temp && s.min_gts_temp !== '--' ? `<tr><td>Temperatura del suelo</td><td class="r">${s.min_gts_temp} a ${s.max_gts_temp} °C</td></tr>` : '';
-    const sky = s.atmo_opacity ? `<tr><td>Cielo</td><td class="r">${s.atmo_opacity === 'Sunny' ? 'Despejado' : s.atmo_opacity}</td></tr>` : '';
+    const uv = s.local_uv_irradiance_index ? `<tr><td>UV radiation</td><td class="r">${({ Low: 'Low', Moderate: 'Moderate', High: 'High', 'Very_High': 'Very high', 'Very High': 'Very high' })[s.local_uv_irradiance_index] || s.local_uv_irradiance_index}</td></tr>` : '';
+    const ground = s.min_gts_temp && s.min_gts_temp !== '--' ? `<tr><td>Ground temperature</td><td class="r">${s.min_gts_temp} to ${s.max_gts_temp} °C</td></tr>` : '';
+    const sky = s.atmo_opacity ? `<tr><td>Sky</td><td class="r">${s.atmo_opacity === 'Sunny' ? 'Clear' : s.atmo_opacity}</td></tr>` : '';
     $('rems').innerHTML = `<table>
-      <tr><td>Último sol con datos</td><td class="r">${s.sol} (${s.terrestrial_date})</td></tr>
-      <tr><td>Temperatura del aire</td><td class="r">${num(s.min_temp)} a ${num(s.max_temp)} °C</td></tr>
-      ${ground}<tr><td>Presión</td><td class="r">${num(s.pressure)} Pa</td></tr>${uv}${sky}
-      <tr><td>Salida / puesta del sol</td><td class="r">${hhmm(s.sunrise)} / ${hhmm(s.sunset)}</td></tr></table>
-      <div class="muted">Fuente: ${W.src}. El feed público trae el último sol procesado (${s.terrestrial_date}), no el clima de hoy.</div>`;
-  } catch (e) { $('rems').innerHTML = `<div class="alert warn">No se pudo consultar la meteorología (${e.message}).</div>`; setChip('c-sun', 'Sin datos', 'warn'); }
+      <tr><td>Latest sol with data</td><td class="r">${s.sol} (${s.terrestrial_date})</td></tr>
+      <tr><td>Air temperature</td><td class="r">${num(s.min_temp)} to ${num(s.max_temp)} °C</td></tr>
+      ${ground}<tr><td>Pressure</td><td class="r">${num(s.pressure)} Pa</td></tr>${uv}${sky}
+      <tr><td>Sunrise / sunset</td><td class="r">${hhmm(s.sunrise)} / ${hhmm(s.sunset)}</td></tr></table>
+      <div class="muted">Source: ${W.src}. The public feed carries the latest processed sol (${s.terrestrial_date}), not today's weather.</div>`;
+  } catch (e) { $('rems').innerHTML = `<div class="alert warn">Could not query the weather (${e.message}).</div>`; setChip('c-sun', 'No data', 'warn'); }
   schedulePlan();
 }
 
-// ---------- Arranque ----------
+// ---------- Startup ----------
 renderStations(); drawWalk();
 loadDonki(); loadWeather();
 (async () => {
   const t0 = performance.now();
-  $('verdict').textContent = 'CARGANDO TERRENO…';
+  $('verdict').textContent = 'LOADING TERRAIN…';
   try { T = await buildTerrain(); }
   catch (e) {
-    $('verdict').className = 'bad'; $('verdict').textContent = 'SIN TERRENO';
-    $('alerts').innerHTML = `<div class="alert bad">No se pudo descargar la elevación de Mars Trek (${e.message}). Sin terreno no se puede calcular una ruta segura.</div>`;
+    $('verdict').className = 'bad'; $('verdict').textContent = 'NO TERRAIN';
+    $('alerts').innerHTML = `<div class="alert bad">Could not download the elevation from Mars Trek (${e.message}). Without terrain a safe route cannot be computed.</div>`;
     return;
   }
   drawSlope(); drawElevation();
-  // Validación contra lo que midió el rover en sus paradas dentro de la zona: altura e inclinación
+  // Validation against what the rover measured at its stops inside the zone: height and tilt
   const inside = ROVER.waypoints.filter(w => w[1] > BBOX.s && w[1] < BBOX.n && w[2] > BBOX.w && w[2] < BBOX.e);
   const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
   const pairs = inside.map(w => [T.S[cellOf([w[1], w[2]])], w[4]]).filter(p => !isNaN(p[0]));
@@ -570,22 +570,22 @@ loadDonki(); loadWeather();
   const mx = mean(pairs.map(p => p[0])), my = mean(pairs.map(p => p[1]));
   const cov = mean(pairs.map(p => (p[0] - mx) * (p[1] - my))), sx = Math.sqrt(mean(pairs.map(p => (p[0] - mx) ** 2))), sy = Math.sqrt(mean(pairs.map(p => (p[1] - my) ** 2)));
   const slopeCorrelation = cov / (sx * sy);
-  const slopeCorrelationText = Number.isFinite(slopeCorrelation) ? slopeCorrelation.toFixed(2) : 'Sin datos';
+  const slopeCorrelationText = Number.isFinite(slopeCorrelation) ? slopeCorrelation.toFixed(2) : 'No data';
   $('quality').innerHTML = `<table>
-    <tr><td>Fuente de elevación</td><td class="r">${M.dem.label}</td></tr>
-    ${M.dem.coarse ? `<tr><td>Resolución nativa del terreno</td><td class="r">≈200 m/píxel</td></tr>` : ''}
-    <tr><td>Paso de cálculo de ruta</td><td class="r">${T.nx}×${T.ny} celdas de ${CELL_M} m${M.dem.coarse ? ' (interpoladas)' : ''}</td></tr>
-    <tr><td>Celdas sin datos</td><td class="r">${T.missing}</td></tr>
-    <tr><td>Puntos comparados con ${M.rover.name}</td><td class="r">${pairs.length}</td></tr>
-    <tr><td>Altura: sesgo medio / MAE sin sesgo</td><td class="r">${eBias.toFixed(1)} m / ${eErr.toFixed(1)} m</td></tr>
-    <tr><td>Inclinación media: terreno / rover</td><td class="r">${mx.toFixed(1)}° / ${my.toFixed(1)}°</td></tr>
-    <tr><td>Diferencia media de inclinación</td><td class="r">${mae.toFixed(1)}°</td></tr>
-    <tr><td>Correlación lineal terreno–rover (−1 a 1)</td><td class="r">${slopeCorrelationText}</td></tr>
-    <tr><td>Tiempo de preparación</td><td class="r">${((performance.now() - t0) / 1000).toFixed(1)} s</td></tr></table>
+    <tr><td>Elevation source</td><td class="r">${M.dem.label}</td></tr>
+    ${M.dem.coarse ? `<tr><td>Native terrain resolution</td><td class="r">≈200 m/pixel</td></tr>` : ''}
+    <tr><td>Route calculation step</td><td class="r">${T.nx}×${T.ny} cells of ${CELL_M} m${M.dem.coarse ? ' (interpolated)' : ''}</td></tr>
+    <tr><td>Cells without data</td><td class="r">${T.missing}</td></tr>
+    <tr><td>Points compared with ${M.rover.name}</td><td class="r">${pairs.length}</td></tr>
+    <tr><td>Height: mean bias / MAE without bias</td><td class="r">${eBias.toFixed(1)} m / ${eErr.toFixed(1)} m</td></tr>
+    <tr><td>Mean tilt: terrain / rover</td><td class="r">${mx.toFixed(1)}° / ${my.toFixed(1)}°</td></tr>
+    <tr><td>Mean tilt difference</td><td class="r">${mae.toFixed(1)}°</td></tr>
+    <tr><td>Terrain–rover linear correlation (−1 to 1)</td><td class="r">${slopeCorrelationText}</td></tr>
+    <tr><td>Preparation time</td><td class="r">${((performance.now() - t0) / 1000).toFixed(1)} s</td></tr></table>
     <div class="muted">${M.dem.coarse
-      ? '<b>Lectura de calidad:</b> la fuente tiene resolución nativa de ~200 m; la grilla de 10 m solo interpola esos datos y no agrega detalle. Sirve para contexto regional y planificación preliminar, no para detectar rocas, escalones ni pendientes locales. La comparación con el rover es indicativa, no una validación independiente de seguridad.'
-      : 'La inclinación del rover incluye rocas y ondulaciones locales que pueden no aparecer en el modelo. La comparación es indicativa y no constituye una validación independiente de seguridad.'}
-      La correlación resume la relación lineal en ${pairs.length} puntos comparados; un valor cercano a 0 significa que esta muestra no muestra una relación lineal clara. No demuestra que la ruta sea segura ni insegura.</div>`;
+      ? '<b>Quality reading:</b> the source has a native resolution of ~200 m; the 10 m grid only interpolates that data and adds no detail. It is useful for regional context and preliminary planning, not for detecting rocks, steps or local slopes. The comparison with the rover is indicative, not an independent safety validation.'
+      : 'The rover tilt includes rocks and local undulations that may not appear in the model. The comparison is indicative and is not an independent safety validation.'}
+      The correlation summarizes the linear relationship across ${pairs.length} compared points; a value near 0 means this sample shows no clear linear relationship. It does not prove the route is safe or unsafe.</div>`;
   window.__quality = { mae, n: pairs.length, mx, my, r: slopeCorrelation, eBias, eErr };
   plan();
 })();

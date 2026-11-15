@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Athenea · Misión EVA</title>
+<title>Athenea · EVA Mission</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-  /* Consola de misión: un solo tema oscuro, alto contraste, controles grandes para usar con guantes. */
+  /* Mission console: a single dark theme, high contrast, large controls for use with gloves. */
   :root {
     --bg: #0f0d0c; --panel: #181412; --panel2: #221c19; --line: #3a2f2a;
     --fg: #f3ebe6; --muted: #a8968c; --accent: #f08a4b;
@@ -66,22 +66,22 @@
 <body>
 <header>
   <div class="brand" id="brand">ATHENEA</div>
-  <label class="chip" style="min-width:0"><span>Misión</span><select id="mission-select" style="font:600 14px var(--font);background:var(--panel2);color:var(--fg);border:0;min-height:28px"></select></label>
-  <div id="verdict" class="warn">CALCULANDO…</div>
-  <div class="chip" id="c-time"><span>Duración EVA</span><b>—</b></div>
-  <div class="chip" id="c-res"><span>Reserva</span><b>—</b></div>
-  <div class="chip" id="c-dist"><span>Distancia</span><b>—</b></div>
-  <div class="chip" id="c-far"><span>Lejos de base</span><b>—</b></div>
-  <div class="chip" id="c-slope"><span>Pendiente máx.</span><b>—</b></div>
-  <div class="chip" id="c-dose"><span>Dosis EVA</span><b>—</b></div>
-  <div class="chip" id="c-sw"><span>Clima espacial</span><b>—</b></div>
-  <div class="chip" id="c-sun"><span>Luz solar</span><b>—</b></div>
-  <a class="nav" href="index.html">Mapa global →</a>
+  <label class="chip" style="min-width:0"><span>Mission</span><select id="mission-select" style="font:600 14px var(--font);background:var(--panel2);color:var(--fg);border:0;min-height:28px"></select></label>
+  <div id="verdict" class="warn">CALCULATING…</div>
+  <div class="chip" id="c-time"><span>EVA duration</span><b>—</b></div>
+  <div class="chip" id="c-res"><span>Reserve</span><b>—</b></div>
+  <div class="chip" id="c-dist"><span>Distance</span><b>—</b></div>
+  <div class="chip" id="c-far"><span>From base</span><b>—</b></div>
+  <div class="chip" id="c-slope"><span>Max slope</span><b>—</b></div>
+  <div class="chip" id="c-dose"><span>EVA dose</span><b>—</b></div>
+  <div class="chip" id="c-sw"><span>Space weather</span><b>—</b></div>
+  <div class="chip" id="c-sun"><span>Daylight</span><b>—</b></div>
+  <a class="nav" href="index.html">Global map →</a>
 </header>
 
 <aside>
   <details open>
-    <summary>Objetivos científicos</summary>
+    <summary>Science objectives</summary>
     <div class="body">
       <div class="muted" id="intro"></div>
       <div id="stations" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -89,66 +89,66 @@
   </details>
 
   <details open>
-    <summary>Herramientas</summary>
+    <summary>Tools</summary>
     <div class="body">
-      <div class="grid3" role="group" aria-label="Modo del mapa">
-        <button id="m-pan" aria-pressed="true">Navegar</button>
-        <button id="m-obs" aria-pressed="false">Obstáculo</button>
-        <button id="m-stop" aria-pressed="false">Parada</button>
+      <div class="grid3" role="group" aria-label="Map mode">
+        <button id="m-pan" aria-pressed="true">Pan</button>
+        <button id="m-obs" aria-pressed="false">Obstacle</button>
+        <button id="m-stop" aria-pressed="false">Stop</button>
       </div>
-      <div class="muted" id="mode-hint">Arrastrá el cuadrado verde para mover la base. Arrastrá los círculos naranjas para mover paradas.</div>
+      <div class="muted" id="mode-hint">Drag the green square to move the base. Drag the orange circles to move stops.</div>
       <div class="grid2">
-        <button class="primary" id="plan">Calcular EVA</button>
-        <button id="clear-obs">Quitar obstáculos</button>
+        <button class="primary" id="plan">Calculate EVA</button>
+        <button id="clear-obs">Remove obstacles</button>
       </div>
-      <button id="copy">Copiar plan (GeoJSON)</button>
-      <label for="coord-in" class="muted">Coordenadas (una por línea: latitud, longitud)</label>
-      <textarea id="coord-in" rows="3" spellcheck="false" placeholder="-4.7960, 137.3880&#10;Cresta norte: 4.79S 137.39E" style="width:100%;font:13px var(--mono);background:#1c1714;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
+      <button id="copy">Copy plan (GeoJSON)</button>
+      <label for="coord-in" class="muted">Coordinates (one per line: latitude, longitude)</label>
+      <textarea id="coord-in" rows="3" spellcheck="false" placeholder="-4.7960, 137.3880&#10;North ridge: 4.79S 137.39E" style="width:100%;font:13px var(--mono);background:#1c1714;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
       <div class="grid3">
-        <button id="ci-stop">Como parada</button>
-        <button id="ci-obs">Como obstáculo</button>
-        <button id="ci-hab">Mover base</button>
+        <button id="ci-stop">As stop</button>
+        <button id="ci-obs">As obstacle</button>
+        <button id="ci-hab">Move base</button>
       </div>
       <div class="muted" id="ci-msg"></div>
     </div>
   </details>
 
   <details open>
-    <summary>Astronauta y traje</summary>
+    <summary>Astronaut and suit</summary>
     <div class="body">
-      <label class="rng">Pendiente máxima a pie <output id="o-slope">15°</output><input type="range" id="p-slope" min="5" max="30" value="15"></label>
-      <label class="rng">Velocidad en llano <output id="o-speed">2.5 km/h</output><input type="range" id="p-speed" min="1" max="4" step="0.25" value="2.5"></label>
-      <label class="rng">Carga transportada <output id="o-load">20 kg</output><input type="range" id="p-load" min="0" max="60" step="5" value="20"></label>
-      <label class="rng">Autonomía del traje <output id="o-eva">7 h</output><input type="range" id="p-eva" min="2" max="9" step="0.5" value="7"></label>
-      <label class="rng">Distancia máxima a la base (regreso a pie) <output id="o-walk">2 km</output><input type="range" id="p-walk" min="0.5" max="5" step="0.25" value="2"></label>
-      <label class="rng">Hora de salida (hora solar local) <output id="o-start">09:00</output><input type="range" id="p-start" min="6" max="14" step="0.5" value="9"></label>
+      <label class="rng">Max walking slope <output id="o-slope">15°</output><input type="range" id="p-slope" min="5" max="30" value="15"></label>
+      <label class="rng">Speed on flat ground <output id="o-speed">2.5 km/h</output><input type="range" id="p-speed" min="1" max="4" step="0.25" value="2.5"></label>
+      <label class="rng">Carried load <output id="o-load">20 kg</output><input type="range" id="p-load" min="0" max="60" step="5" value="20"></label>
+      <label class="rng">Suit endurance <output id="o-eva">7 h</output><input type="range" id="p-eva" min="2" max="9" step="0.5" value="7"></label>
+      <label class="rng">Max distance from base (walk back) <output id="o-walk">2 km</output><input type="range" id="p-walk" min="0.5" max="5" step="0.25" value="2"></label>
+      <label class="rng">Departure time (local solar time) <output id="o-start">09:00</output><input type="range" id="p-start" min="6" max="14" step="0.5" value="9"></label>
     </div>
   </details>
 
   <details open>
-    <summary>Capas</summary>
+    <summary>Layers</summary>
     <div class="body">
-      <div class="muted">Óptico</div>
+      <div class="muted">Optical</div>
       <label class="chk"><input type="radio" name="opt" id="l-hirise" checked> <span id="lbl-hirise">HiRISE</span></label>
       <label class="chk"><input type="radio" name="opt" id="l-ctx"> <span id="lbl-ctx">CTX</span></label>
-      <div class="muted">Topográfico</div>
-      <label class="chk"><input type="checkbox" id="l-slope" checked> <span id="lbl-dem">Pendiente calculada</span></label>
-      <label class="chk"><input type="checkbox" id="l-dem"> Elevación (tonos de gris)</label>
+      <div class="muted">Topographic</div>
+      <label class="chk"><input type="checkbox" id="l-slope" checked> <span id="lbl-dem">Calculated slope</span></label>
+      <label class="chk"><input type="checkbox" id="l-dem"> Elevation (grayscale)</label>
       <div class="legend" id="slope-legend"></div>
-      <div class="muted">Térmico</div>
-      <label class="chk"><input type="checkbox" id="l-themis"> THEMIS infrarrojo nocturno (100 m)</label>
-      <div class="muted">Claro de noche = roca o suelo firme que retiene calor; oscuro = polvo o arena suelta.</div>
-      <div class="muted">Geología</div>
-      <label class="chk"><input type="checkbox" id="l-geology"> Unidad cartografiada NHjf₂</label>
-      <div class="muted">Datos del rover</div>
-      <label class="chk"><input type="checkbox" id="l-trav" checked> <span id="lbl-rover">Recorrido del rover</span></label>
-      <label class="chk"><input type="checkbox" id="l-wp" checked> <span id="lbl-wp">Paradas del rover</span></label>
-      <label class="chk"><input type="checkbox" id="l-walk" checked> Radio de regreso a pie</label>
+      <div class="muted">Thermal</div>
+      <label class="chk"><input type="checkbox" id="l-themis"> THEMIS nighttime infrared (100 m)</label>
+      <div class="muted">Bright at night = rock or firm ground that holds heat; dark = dust or loose sand.</div>
+      <div class="muted">Geology</div>
+      <label class="chk"><input type="checkbox" id="l-geology"> Mapped unit NHjf₂</label>
+      <div class="muted">Rover data</div>
+      <label class="chk"><input type="checkbox" id="l-trav" checked> <span id="lbl-rover">Rover traverse</span></label>
+      <label class="chk"><input type="checkbox" id="l-wp" checked> <span id="lbl-wp">Rover stops</span></label>
+      <label class="chk"><input type="checkbox" id="l-walk" checked> Walk-back radius</label>
     </div>
   </details>
 
   <details open>
-    <summary>Plan de la EVA</summary>
+    <summary>EVA plan</summary>
     <div class="body">
       <div id="alerts-static"></div>
       <div id="alerts" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -158,34 +158,34 @@
   </details>
 
   <details open>
-    <summary>Recursos estimados</summary>
+    <summary>Estimated consumables</summary>
     <div class="body">
-      <label class="muted" for="o2-architecture">Oxígeno extra por ventilación (escenario)</label>
+      <label class="muted" for="o2-architecture">Extra oxygen for ventilation (scenario)</label>
       <select id="o2-architecture" style="font:14px var(--font);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;min-height:38px;padding:6px">
-        <option value="0">Ciclo cerrado · 0 kg/h</option>
-        <option value="0.125">Purga RCA · 0,125 kg/h</option>
-        <option value="1">Ventilación abierta · 1 kg/h</option>
+        <option value="0">Closed loop · 0 kg/h</option>
+        <option value="0.125">RCA purge · 0.125 kg/h</option>
+        <option value="1">Open-loop ventilation · 1 kg/h</option>
       </select>
-      <div id="consumables" class="muted">Calculando estimación…</div>
+      <div id="consumables" class="muted">Calculating estimate…</div>
     </div>
   </details>
 
   <details open>
-    <summary>Radiación y clima espacial</summary>
+    <summary>Radiation and space weather</summary>
     <div class="body">
       <div id="rad"></div>
-      <div id="donki" class="muted">Consultando DONKI (NASA)…</div>
+      <div id="donki" class="muted">Querying DONKI (NASA)…</div>
     </div>
   </details>
 
   <details open>
-    <summary id="wx-title">Meteorología</summary>
-    <div class="body"><div id="rems" class="muted">Consultando REMS…</div></div>
+    <summary id="wx-title">Weather</summary>
+    <div class="body"><div id="rems" class="muted">Querying weather station…</div></div>
   </details>
 
   <details>
-    <summary>Calidad de los datos</summary>
-    <div class="body"><div id="quality" class="muted">Calculando…</div></div>
+    <summary>Data quality</summary>
+    <div class="body"><div id="quality" class="muted">Calculating…</div></div>
   </details>
 </aside>
 
@@ -194,8 +194,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="data/curiosity.js"></script>
 <script src="data/perseverance.js"></script>
-<script src="misiones.js"></script>
+<script src="missions.js"></script>
 <script src="coords.js"></script>
-<script src="mision.js"></script>
+<script src="mission.js"></script>
 </body>
 </html>

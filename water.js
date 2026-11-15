@@ -1,18 +1,18 @@
-// Capa "Agua y hielo" para la prueba técnica.
-// IMPORTANTE: geometrías APROXIMADAS, digitalizadas a mano a partir de publicaciones.
-// Sirven para probar la mecánica (capas + análisis de ruta), no para planificar nada real.
-// Coordenadas [lat, lon] planetocéntricas, longitud Este ±180.
+// "Water and ice" layer for the technical prototype.
+// IMPORTANT: APPROXIMATE geometries, hand-digitized from publications.
+// They exist to test the mechanics (layers + route analysis), not to plan anything real.
+// Planetocentric [lat, lon] coordinates, East longitude ±180.
 
 const W_R_MARS = 3389.5;
-const W_DEG_KM = Math.PI * W_R_MARS / 180; // ~59,16 km por grado
+const W_DEG_KM = Math.PI * W_R_MARS / 180; // ~59.16 km per degree
 
 const WATER_CATS = {
-  hielo:    { label: 'Hielo confirmado',                     color: '#4cc9f0', rank: 1 },
-  radar:    { label: 'Hielo probable (radar / glaciares)',   color: '#a0c4ff', rank: 2 },
-  pasada:   { label: 'Agua en el pasado (lagos, deltas)',    color: '#2ec4b6', rank: 3 },
-  debatido: { label: 'Agua actual debatida',                 color: '#c77dff', rank: 4 },
-  valle:    { label: 'Cerca de un valle o canal',            color: '#ff9f1c', rank: 5 },
-  ninguno:  { label: 'Sin indicios cargados',                color: '#ffffff', rank: 9 },
+  ice:     { label: 'Confirmed ice',                  color: '#4cc9f0', rank: 1 },
+  radar:   { label: 'Probable ice (radar / glaciers)', color: '#a0c4ff', rank: 2 },
+  past:    { label: 'Past water (lakes, deltas)',      color: '#2ec4b6', rank: 3 },
+  debated: { label: 'Debated present-day water',       color: '#c77dff', rank: 4 },
+  valley:  { label: 'Near a valley or channel',        color: '#ff9f1c', rank: 5 },
+  none:    { label: 'No evidence loaded',              color: '#ffffff', rank: 9 },
 };
 
 function circlePoly(lat, lon, rKm, n = 40) {
@@ -25,17 +25,17 @@ function circlePoly(lat, lon, rKm, n = 40) {
 }
 
 const WATER_ZONES = [
-  { name: 'Casquete polar norte', cat: 'hielo', src: 'MGS / MRO', poly: [[80, -180], [80, 180], [90, 180], [90, -180]] },
-  { name: 'Casquete polar sur', cat: 'hielo', src: 'Mars Express / MRO', poly: [[-84, -180], [-84, 180], [-90, 180], [-90, -180]] },
-  { name: 'Cráter Korolev (hielo)', cat: 'hielo', src: 'Mars Express', poly: circlePoly(73, 165, 41) },
-  { name: 'Arcadia Planitia: hielo somero', cat: 'radar', src: 'SWIM / SHARAD', poly: [[35, -170], [35, -145], [50, -145], [50, -170]] },
-  { name: 'Utopia Planitia: hielo enterrado', cat: 'radar', src: 'SHARAD (Stuurman et al. 2016)', poly: [[39, 79], [39, 101], [49, 101], [49, 79]] },
-  { name: 'Deuteronilus Mensae: glaciares cubiertos', cat: 'radar', src: 'SHARAD', poly: [[40, 15], [40, 32], [48, 32], [48, 15]] },
-  { name: 'Protonilus Mensae: glaciares cubiertos', cat: 'radar', src: 'SHARAD', poly: [[40, 40], [40, 58], [48, 58], [48, 40]] },
-  { name: 'Este de Hellas: glaciares de derrubios', cat: 'radar', src: 'SHARAD (Holt et al. 2008)', poly: [[-38, 96], [-38, 112], [-46, 112], [-46, 96]] },
-  { name: 'Jezero: paleolago y delta', cat: 'pasada', src: 'Perseverance', poly: circlePoly(18.38, 77.58, 23) },
-  { name: 'Gale: paleolago', cat: 'pasada', src: 'Curiosity', poly: circlePoly(-5.4, 137.8, 77) },
-  { name: 'Gusev: posible paleolago', cat: 'pasada', src: 'Spirit', poly: circlePoly(-14.5, 175.4, 83) },
+  { name: 'North polar cap', cat: 'ice', src: 'MGS / MRO', poly: [[80, -180], [80, 180], [90, 180], [90, -180]] },
+  { name: 'South polar cap', cat: 'ice', src: 'Mars Express / MRO', poly: [[-84, -180], [-84, 180], [-90, 180], [-90, -180]] },
+  { name: 'Korolev crater (ice)', cat: 'ice', src: 'Mars Express', poly: circlePoly(73, 165, 41) },
+  { name: 'Arcadia Planitia: shallow ice', cat: 'radar', src: 'SWIM / SHARAD', poly: [[35, -170], [35, -145], [50, -145], [50, -170]] },
+  { name: 'Utopia Planitia: buried ice', cat: 'radar', src: 'SHARAD (Stuurman et al. 2016)', poly: [[39, 79], [39, 101], [49, 101], [49, 79]] },
+  { name: 'Deuteronilus Mensae: debris-covered glaciers', cat: 'radar', src: 'SHARAD', poly: [[40, 15], [40, 32], [48, 32], [48, 15]] },
+  { name: 'Protonilus Mensae: debris-covered glaciers', cat: 'radar', src: 'SHARAD', poly: [[40, 40], [40, 58], [48, 58], [48, 40]] },
+  { name: 'Eastern Hellas: lobate debris aprons', cat: 'radar', src: 'SHARAD (Holt et al. 2008)', poly: [[-38, 96], [-38, 112], [-46, 112], [-46, 96]] },
+  { name: 'Jezero: paleolake and delta', cat: 'past', src: 'Perseverance', poly: circlePoly(18.38, 77.58, 23) },
+  { name: 'Gale: paleolake', cat: 'past', src: 'Curiosity', poly: circlePoly(-5.4, 137.8, 77) },
+  { name: 'Gusev: possible paleolake', cat: 'past', src: 'Spirit', poly: circlePoly(-14.5, 175.4, 83) },
 ];
 
 const WATER_VALLEYS = [
@@ -49,26 +49,26 @@ const WATER_VALLEYS = [
   { name: 'Niger Vallis', coords: [[-30, 95], [-32, 92]] },
   { name: 'Harmakhis Vallis', coords: [[-37, 97], [-39, 93], [-41, 88]] },
   { name: 'Reull Vallis', coords: [[-40, 115], [-42, 108], [-41, 100]] },
-  { name: 'Neretva Vallis (entrada a Jezero)', coords: [[18.75, 76.7], [18.6, 77.0], [18.5, 77.25], [18.47, 77.4]] },
-  { name: 'Sava Vallis (entrada a Jezero)', coords: [[19.1, 77.7], [18.75, 77.6]] },
+  { name: 'Neretva Vallis (Jezero inlet)', coords: [[18.75, 76.7], [18.6, 77.0], [18.5, 77.25], [18.47, 77.4]] },
+  { name: 'Sava Vallis (Jezero inlet)', coords: [[19.1, 77.7], [18.75, 77.6]] },
 ];
 
 const WATER_POINTS = [
-  { name: 'Phoenix: hielo excavado (2008)', cat: 'hielo', lat: 68.22, lon: -125.75 },
-  { name: 'Mawrth Vallis: arcillas', cat: 'pasada', lat: 24, lon: -19 },
-  { name: 'Cráter Newton: líneas de pendiente recurrentes', cat: 'debatido', lat: -41.6, lon: -158.1 },
-  { name: 'Posible lago bajo el hielo (MARSIS 2018)', cat: 'debatido', lat: -81, lon: -167 },
-  { name: 'Fondo de Hellas: presión suficiente para agua líquida breve', cat: 'debatido', lat: -42.4, lon: 70.5 },
+  { name: 'Phoenix: excavated ice (2008)', cat: 'ice', lat: 68.22, lon: -125.75 },
+  { name: 'Mawrth Vallis: clays', cat: 'past', lat: 24, lon: -19 },
+  { name: 'Newton crater: recurring slope lineae', cat: 'debated', lat: -41.6, lon: -158.1 },
+  { name: 'Possible subglacial lake (MARSIS 2018)', cat: 'debated', lat: -81, lon: -167 },
+  { name: 'Hellas floor: pressure high enough for brief liquid water', cat: 'debated', lat: -42.4, lon: 70.5 },
 ];
 
 const EXAMPLE_ROUTES = {
-  hellas: { label: 'Harmakhis Vallis → glaciares de Hellas este', view: [-40, 99, 5],
+  hellas: { label: 'Harmakhis Vallis → eastern Hellas glaciers', view: [-40, 99, 5],
     coords: [[-41, 88.5], [-39.8, 91], [-39, 93], [-38, 95.5], [-39.5, 98], [-41, 100.5], [-42, 104], [-43, 107]] },
-  jezero: { label: 'Neretva Vallis → delta de Jezero', view: [18.55, 77.2, 8],
+  jezero: { label: 'Neretva Vallis → Jezero delta', view: [18.55, 77.2, 8],
     coords: [[18.75, 76.75], [18.6, 77.0], [18.5, 77.25], [18.4447, 77.4508], [18.38, 77.58]] },
 };
 
-// ---------- Geometría ----------
+// ---------- Geometry ----------
 function wHav(a, b) {
   const t = Math.PI / 180, dLat = (b[0] - a[0]) * t, dLon = (b[1] - a[1]) * t;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * t) * Math.cos(b[0] * t) * Math.sin(dLon / 2) ** 2;
@@ -104,12 +104,12 @@ function classifyPoint(p, bufKm) {
   const hits = [];
   WATER_ZONES.forEach(z => { if (wInPoly(p, z.poly)) hits.push({ cat: z.cat, name: z.name }); });
   const v = nearestValley(p, bufKm);
-  if (v) hits.push({ cat: 'valle', name: v.name });
+  if (v) hits.push({ cat: 'valley', name: v.name });
   hits.sort((a, b) => WATER_CATS[a.cat].rank - WATER_CATS[b.cat].rank);
-  return { cat: hits.length ? hits[0].cat : 'ninguno', hits };
+  return { cat: hits.length ? hits[0].cat : 'none', hits };
 }
 
-// Recorre la ruta en pasos de ~stepKm y agrupa tramos por categoría.
+// Walks the route in ~stepKm steps and groups segments by category.
 function analyzeRoute(latlngs, bufKm, stepKm = 2) {
   const pts = latlngs.map(ll => [ll.lat, ll.lng]);
   const res = { segments: [], totals: {}, features: new Map(), totalKm: 0 };
@@ -128,12 +128,12 @@ function analyzeRoute(latlngs, bufKm, stepKm = 2) {
   return res;
 }
 
-// ---------- Capas Leaflet ----------
+// ---------- Leaflet layers ----------
 function buildWaterLayers() {
   const zones = L.layerGroup(), valleys = L.layerGroup(), points = L.layerGroup();
   WATER_ZONES.forEach(z => L.polygon(z.poly, { color: WATER_CATS[z.cat].color, weight: 1.5, fillOpacity: 0.22, dashArray: z.cat === 'radar' ? '5 4' : null })
     .bindTooltip(`${z.name}<br><small>${WATER_CATS[z.cat].label} · ${z.src}</small>`, { sticky: true }).addTo(zones));
-  WATER_VALLEYS.forEach(v => L.polyline(v.coords, { color: WATER_CATS.valle.color, weight: 3, opacity: 0.9 })
+  WATER_VALLEYS.forEach(v => L.polyline(v.coords, { color: WATER_CATS.valley.color, weight: 3, opacity: 0.9 })
     .bindTooltip(v.name, { sticky: true }).addTo(valleys));
   WATER_POINTS.forEach(p => L.circleMarker([p.lat, p.lon], { radius: 6, color: '#fff', weight: 1.5, fillColor: WATER_CATS[p.cat].color, fillOpacity: 1 })
     .bindTooltip(`${p.name}<br><small>${WATER_CATS[p.cat].label}</small>`).addTo(points));
