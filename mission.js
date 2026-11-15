@@ -1,12 +1,13 @@
-// ATHENEA · EVA planner. Works for any mission defined in missions.js (chosen with ?m=gale, ?m=jezero…).
+// ATHENEA · EVA planner. Mission profiles remain available through the ?m= parameter.
 // NASA data: HiRISE/CTX (optical), DTM via Mars Trek (topographic), THEMIS (thermal), rover traverse (in situ),
 // RAD (surface radiation measurement), DONKI (live space weather), REMS/MEDA (rover weather stations).
 
 // ---------- Selected mission ----------
 const PAGE_PARAMS = new URLSearchParams(location.search);
-const MISSION_ID = (PAGE_PARAMS.get('m') || 'gale').toLowerCase();
+const requestedMissionId = (PAGE_PARAMS.get('m') || 'jezero').toLowerCase();
+const MISSION_ID = Object.hasOwn(MISSIONS, requestedMissionId) ? requestedMissionId : 'jezero';
 const INITIAL_SCENARIO_ID = PAGE_PARAMS.get('scenario');
-const M = MISSIONS[MISSION_ID] || MISSIONS.gale;
+const M = MISSIONS[MISSION_ID] || MISSIONS.jezero;
 const ROVER = ROVER_DATA[M.rover.key];
 
 // ---------- Constants ----------
@@ -49,9 +50,6 @@ document.getElementById('lbl-dem').textContent = 'Calculated slope (' + M.dem.la
 document.getElementById('lbl-rover').textContent = M.rover.name + ' traverse';
 document.getElementById('lbl-wp').textContent = `${M.rover.name} stops (measured tilt)`;
 document.getElementById('wx-title').textContent = `Weather (${M.weather === 'msl' ? 'REMS, Curiosity' : 'MEDA, Perseverance'})`;
-const sel = document.getElementById('mission-select');
-sel.innerHTML = Object.entries(MISSIONS).map(([k, v]) => `<option value="${k}" ${k === MISSION_ID ? 'selected' : ''}>${v.name}</option>`).join('');
-sel.onchange = () => { const next = new URLSearchParams(location.search); next.set('m', sel.value); location.search = '?' + next.toString(); };
 document.getElementById('p-walk').value = M.defaults.walk;
 document.getElementById('o-walk').textContent = M.defaults.walk + ' km';
 

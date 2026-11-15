@@ -1,12 +1,12 @@
 # Minimal static server (no Node or Python needed). Usage: powershell -ExecutionPolicy Bypass -File serve.ps1 [-Port 8765]
-# Then open http://localhost:8765/mission.html (mission) or http://localhost:8765/ (global map).
+# Then open http://localhost:8765/mission.html?m=jezero (planner) or http://localhost:8765/ (Jezero map).
 param([int]$Port = 8765)
 $root = $PSScriptRoot
 $listener = [System.Net.HttpListener]::new()
 $listener.Prefixes.Add("http://localhost:$Port/")
 $listener.Start()
 Write-Host "Serving $root at http://localhost:$Port/"
-$types = @{ '.html'='text/html; charset=utf-8'; '.js'='application/javascript; charset=utf-8'; '.css'='text/css'; '.json'='application/json'; '.geojson'='application/geo+json'; '.png'='image/png'; '.jpg'='image/jpeg'; '.md'='text/plain; charset=utf-8' }
+$types = @{ '.html'='text/html; charset=utf-8'; '.js'='application/javascript; charset=utf-8'; '.css'='text/css; charset=utf-8'; '.json'='application/json'; '.geojson'='application/geo+json; charset=utf-8'; '.png'='image/png'; '.jpg'='image/jpeg'; '.svg'='image/svg+xml'; '.md'='text/plain; charset=utf-8' }
 while ($listener.IsListening) {
   $ctx = $listener.GetContext()
   try {

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Athenea · EVA Mission</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
   /* Mission console: a single dark theme, high contrast, large controls for use with gloves. */
   :root {
@@ -70,7 +70,6 @@
 <body>
 <header>
   <div class="brand" id="brand">ATHENEA</div>
-  <label class="chip" style="min-width:0"><span>Mission</span><select id="mission-select" style="font:600 14px var(--font);background:var(--panel2);color:var(--fg);border:0;min-height:28px"></select></label>
   <div id="verdict" class="warn">CALCULATING…</div>
   <div class="chip" id="c-time"><span>EVA duration</span><b>—</b></div>
   <div class="chip" id="c-res"><span>Reserve</span><b>—</b></div>
@@ -80,7 +79,6 @@
   <div class="chip" id="c-dose"><span>EVA dose</span><b>—</b></div>
   <div class="chip" id="c-sw"><span>Space weather</span><b>—</b></div>
   <div class="chip" id="c-sun"><span>Daylight</span><b>—</b></div>
-  <a class="nav" href="index.html">Global map →</a>
 </header>
 
 <aside>
@@ -107,7 +105,7 @@
       </div>
       <button id="copy">Copy plan (GeoJSON)</button>
       <label for="coord-in" class="muted">Coordinates (one per line: latitude, longitude)</label>
-      <textarea id="coord-in" rows="3" spellcheck="false" placeholder="-4.7960, 137.3880&#10;North ridge: 4.79S 137.39E" style="width:100%;font:13px var(--mono);background:#1c1714;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
+      <textarea id="coord-in" rows="3" spellcheck="false" placeholder="18.4600, 77.4000&#10;Delta front: 18.46N 77.40E" style="width:100%;font:13px var(--mono);background:#1c1714;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
       <div class="grid3">
         <button id="ci-stop">As stop</button>
         <button id="ci-obs">As obstacle</button>
@@ -218,7 +216,8 @@
 
 <div id="map"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="desktop/offline-status.js"></script>
 <script src="data/curiosity.js"></script>
 <script src="data/perseverance.js"></script>
 <script src="data/scenarios.js"></script>

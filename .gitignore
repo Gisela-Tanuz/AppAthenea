@@ -1,2 +1,7 @@
 # Local music files: copyrighted tracks must not be committed or published
 video/music/
+node_modules/
+vendor/leaflet/
+dist/
+diag-electron-report.txt
+diag-electron.ps1

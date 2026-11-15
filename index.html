@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mars Map Prototype</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<title>Athenea · Jezero Map</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
   :root {
     --bg: #f6f1ee; --panel: #ffffff; --fg: #2a1d18; --muted: #7a655c;
@@ -49,23 +49,14 @@
 <body>
 <aside>
   <div>
-    <h1>Technical prototype · Mars map</h1>
+    <h1>Technical prototype · Jezero map</h1>
     <div class="hint">Leaflet 1.9.4 + NASA Mars Trek tiles (equirectangular)</div>
-    <a href="mission.html?m=gale" style="display:inline-block;margin-top:8px;color:var(--accent);font-weight:600">Mount Sharp EVA mission →</a>
-    <a href="mission.html?m=jezero" style="display:inline-block;margin-top:4px;color:var(--accent);font-weight:600">Jezero Delta EVA mission →</a>
+    <a href="mission.html?m=jezero" style="display:inline-block;margin-top:8px;color:var(--accent);font-weight:600">Jezero Delta EVA mission →</a>
   </div>
 
   <section>
     <h2>1 · Region</h2>
-    <select id="region">
-      <option value="18.4,77.5,6">Jezero crater (Perseverance)</option>
-      <option value="-5.4,137.8,5">Gale crater (Curiosity)</option>
-      <option value="18.6,-133.8,4">Olympus Mons</option>
-      <option value="-8,-75,3">Valles Marineris</option>
-      <option value="-40,85,3">Hellas Planitia</option>
-      <option value="45,60,2">Northern mid-latitudes (ice)</option>
-      <option value="0,0,1">Whole planet</option>
-    </select>
+    <div>Jezero crater (Perseverance)</div>
   </section>
 
   <section>
@@ -75,7 +66,7 @@
     <label><input type="checkbox" id="o-viking"> Viking overlay</label>
     <label>Opacity <input type="range" id="o-opacity" min="0" max="1" step="0.05" value="0.6"></label>
     <label><input type="checkbox" id="o-grid" checked> 10° / 30° graticule</label>
-    <label><input type="checkbox" id="o-sites" checked> Landing sites</label>
+    <label><input type="checkbox" id="o-sites" checked> Perseverance landing site</label>
   </section>
 
   <section>
@@ -102,7 +93,6 @@
       <button id="clear">Clear all</button>
     </div>
     <div class="row">
-      <button id="ex-hellas">Example: Hellas</button>
       <button id="ex-jezero">Example: Jezero</button>
     </div>
   </section>
@@ -143,7 +133,8 @@
 </aside>
 <div id="map"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="desktop/offline-status.js"></script>
 <script src="coords.js"></script>
 <script src="water.js"></script>
 <script src="route.js"></script>
@@ -188,9 +179,7 @@ grid.addTo(map);
 
 // --- Sites (sample GeoJSON layer; positive East longitude, -180..180) ---
 const sitesData = { type: 'FeatureCollection', features: [
-  ['Perseverance (Jezero)', 77.45, 18.44], ['Curiosity (Gale)', 137.42, -4.59],
-  ['InSight (Elysium)', 135.62, 4.50], ['Viking 1', -49.97, 22.27], ['Viking 2', 134.29, 47.97],
-  ['Opportunity', -5.53, -1.95], ['Spirit', 175.47, -14.57], ['Zhurong (Utopia)', 109.93, 25.07],
+  ['Perseverance (Jezero)', 77.45, 18.44],
 ].map(([name, lon, lat]) => ({ type: 'Feature', properties: { name }, geometry: { type: 'Point', coordinates: [lon, lat] } })) };
 const sites = L.geoJSON(sitesData, {
   pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: '#fff', weight: 1.5, fillColor: '#3fa7d6', fillOpacity: 1 }),
@@ -352,7 +341,6 @@ function loadExample(key) {
   setRoute(ex.coords);
   map.setView([ex.view[0], ex.view[1]], ex.view[2]);
 }
-document.getElementById('ex-hellas').onclick = () => loadExample('hellas');
 document.getElementById('ex-jezero').onclick = () => loadExample('jezero');
 
 // --- GeoJSON (positive East longitude -180..180, planetocentric IAU Mars 2000 system) ---
@@ -376,15 +364,9 @@ document.getElementById('import').onclick = () => {
   } catch (err) { msg.style.color = 'var(--accent)'; msg.textContent = 'Could not import. ' + err.message; }
 };
 
-// --- Initial region + demo ---
-const goRegion = v => { const [lat, lon, z] = v.split(',').map(Number); map.setView([lat, lon], z); };
-document.getElementById('region').addEventListener('change', e => goRegion(e.target.value));
-goRegion(document.getElementById('region').value);
-// Sample data: a point at Perseverance and a route along Harmakhis Vallis toward the Hellas glaciers
+// --- Initial Jezero view ---
+// Sample data: a point at Perseverance; route planning starts when the user selects a tool or example.
 addPoint(L.latLng(18.4447, 77.4508), 'Perseverance');
-loadExample('hellas');
-// On load, suggest a route between the endpoints of the Hellas example
-runSuggest(L.latLng(-41, 88.5), L.latLng(-43, 107));
 
 window.__diag = () => ({ tileErrors, zoom: map.getZoom(), center: map.getCenter() });
 </script>
