@@ -49,6 +49,10 @@
   .st .n { font-weight: 600; } .st .o { grid-column: 2 / 4; font-size: 12px; color: var(--muted); }
   .st .t { font: 12px var(--mono); color: var(--muted); }
   .st button { min-height: 28px; padding: 2px 8px; font-size: 12px; }
+  .scenario-rating { display: flex; flex-wrap: wrap; gap: 6px; }
+  .scenario-rating span, .scenario-evidence { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: #1c1714; }
+  .scenario-evidence { margin: 6px 0; font-size: 12px; }
+  .scenario-title { margin: 6px 0 2px; font-size: 15px; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
   td, th { padding: 3px 4px; border-bottom: 1px solid var(--line); text-align: left; } td.r, th.r { text-align: right; font-family: var(--mono); }
   .alert { padding: 8px 10px; border-radius: 8px; font-size: 13px; border: 1px solid var(--line); }
@@ -157,6 +161,16 @@
     </div>
   </details>
 
+  <details id="scenario-panel" open>
+    <summary>Hypothetical scenarios</summary>
+    <div class="body">
+      <div class="alert warn"><b>Planning guidance, not a prediction.</b> Likelihood and severity are qualitative; they are not local measurements and do not change the EVA route or verdict.</div>
+      <label class="muted" for="scenario-select">Scenario (10 in total)</label>
+      <select id="scenario-select" aria-label="Hypothetical scenario" style="font:14px var(--font);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;min-height:38px;padding:6px"></select>
+      <div id="scenario-detail" aria-live="polite"></div>
+    </div>
+  </details>
+
   <details open>
     <summary>Estimated consumables</summary>
     <div class="body">
@@ -183,6 +197,19 @@
     <div class="body"><div id="rems" class="muted">Querying weather station…</div></div>
   </details>
 
+  <details id="meda-panel" hidden open>
+    <summary>Seasonal temperature · MEDA</summary>
+    <div class="body">
+      <label class="muted" for="meda-season">Jezero seasonal record</label>
+      <select id="meda-season" aria-label="MEDA seasonal record" style="font:14px var(--font);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;min-height:38px;padding:6px">
+        <option value="25">Ls 25° · spring</option>
+        <option value="90">Ls 90° · summer</option>
+        <option value="180">Ls 180° · autumn</option>
+      </select>
+      <div id="meda-temperature"></div>
+    </div>
+  </details>
+
   <details>
     <summary>Data quality</summary>
     <div class="body"><div id="quality" class="muted">Calculating…</div></div>
@@ -194,6 +221,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="data/curiosity.js"></script>
 <script src="data/perseverance.js"></script>
+<script src="data/scenarios.js"></script>
 <script src="missions.js"></script>
 <script src="coords.js"></script>
 <script src="mission.js"></script>
